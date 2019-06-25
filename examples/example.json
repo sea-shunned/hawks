@@ -1,0 +1,44 @@
+{
+    "hawks": {
+        "folder_name": "test",
+        "mode": "single",
+        "n_objectives": 1,
+        "num_runs": 1,
+        "seed_num": 1,
+        "save_best_data": false,
+        "save_stats": false,
+        "plot_best": false,
+        "save_plot": false
+    },
+    "dataset": {
+        "num_examples": 1000,
+        "num_clusters": 10,
+        "num_dims": 2,
+        "equal_clusters": false,
+        "min_clust_size": 0.01
+    },
+    "ga": {
+        "num_gens": 50,
+        "num_indivs": 10,
+        "mut_prob_mean": "length",
+        "mut_prob_cov": "length",
+        "mate_prob": 0.7,
+        "prob_fitness": 0.5,
+        "elites": 0.2
+    },
+    "constraints": {
+        "overlap": {
+            "threshold": 0.0,
+            "limit": "upper"
+        },
+        "eigenval_ratio": {
+            "threshold": 1,
+            "limit": "lower"
+        }
+    },
+    "objectives": {
+        "silhouette": {
+            "target": 0.8
+        }
+    }
+}

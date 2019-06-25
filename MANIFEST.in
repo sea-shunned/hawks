@@ -1,0 +1,2 @@
+include user_guide.md
+include hawks/defaults.json
