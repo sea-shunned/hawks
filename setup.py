@@ -3,7 +3,7 @@ from setuptools import setup
 if __name__ == '__main__':
     setup(
         name='hawks',
-        version='0.0.1',
+        version='0.0.2',
         author='Cameron Shand',
         author_email='cameron.shand@manchester.ac.uk',
         packages=['hawks'],

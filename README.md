@@ -6,6 +6,8 @@ HAWKS is a tool for generating controllably difficult synthetic data, used prima
 
 The academic/technical details can be found there. What follows here is a practical guide to using this tool to generate synthetic data.
 
+If you use this tool to generate data that forms part of a paper, please consider either linking to this work or citing the paper above.
+
 ## Installation
 Installation is available through pip by:
 ```
@@ -53,4 +55,6 @@ print(f"ARI: {ari}")
 For a more detailed explanation of the parameters and how to use HAWKS, please read the [user guide](https://github.com/sea-shunned/hawks/blob/master/user_guide.md).
 
 ## Issues
-If you encounter an issue, first ensure that `hawks` is running as intended by navigating to the tests directory, and running `python tests.py`. If any test fails, please add details of this alongside your original problem to an issue on the [github repo]().
+As this work is still in development, plain sailing is not guaranteed. If you encounter an issue, first ensure that `hawks` is running as intended by navigating to the tests directory, and running `python tests.py`. If any test fails, please add details of this alongside your original problem to an issue on the [github repo]().
+
+## Feature Requests

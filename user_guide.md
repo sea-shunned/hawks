@@ -70,3 +70,12 @@ For the `"constraints"`, it is expected to be in the form below:
 }
 ```
 where the `"constraint_name"` must match the corresponding function name in `constraints.py`, the `"threshold"` is a value of this constraint, and `"limit"` takes either `"upper"` or `"lower"` to denote whether this threshold is an upper limit or lower limit. In the former case, values above the threshold will be penalized, and the inverse for a lower limit.
+
+## Plotting
+Some plotting functions have been made to visualize the generated datasets. The current two methods for the generator are `plot_best_indiv()`, and `plot_indivs()`. The former creates a separate plot for each best individual (only one for the single config case), the latter plots all given individuals onto the same plot. In both cases, for datasets over 2 dimensions, PCA is used to project them down to 2D.
+
+By default, the most recently seen population is accessible through the `.population` attribute, which when given as the argument to `plot_indivs()` can be useful to glimpse how the datasets look. The `plot_indivs()` method can also be given the `.best_indiv` attribute, for when (in the multi-config case) you want to view them on one graph. Note that, if the number of rows and columns for how to arrange these plots are not supplied, then a roughly square number of rows and columns will be used.
+
+A filename and folder location can be specified to save the resulting plot (if these are given then saving is assumed), overriding previous config settings. If `save` is set to `True` but no location is given either to the function or from the config, the current working directory is used.
+
+For analysis on the results, the `.stats` attribute contains a Pandas dataframe which provides easy access to Pandas' plotting capabilities. Some methods to facilitate this directly may be added in future versions.

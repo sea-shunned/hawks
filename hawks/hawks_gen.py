@@ -88,7 +88,7 @@ class BaseGenerator:
         # Initialize attributes
         self.population = None # Reference to the final pop
         self.best_dataset = None # Array of the best dataset
-        self.best_indiv = [] # Best indiv Genotype object
+        self.best_indiv = None # Best indiv(s), Genotype object
         self.best_config = None # Config for the best indiv
         self.base_folder = None # Folder where everything is saved
         self.global_rng = None # RandomState instance used throughout
@@ -285,21 +285,106 @@ class BaseGenerator:
     def _compare_individuals(indiv1, indiv2):
         raise NotImplementedError
 
-    def plot_best_indiv(self, cmap="rainbow", fig_format="png"):
+    def _determine_folder(self, folder):
+        """Determine the save location
+        """
+        # If no directory was given, set one
+        if folder is None:
+            # Use the base_folder is available
+            try:
+                root = self.base_folder / "plots"
+            # If the base_folder is not set, use the current working directory
+            except TypeError:
+                root = Path.cwd()
+        # Convert the folder to a path
+        else:
+            root = Path(folder)                    
+        return root
+
+    def plot_best_indiv(self, folder=None, cmap="rainbow", fig_format="png", save=None, remove_axis=False, filename=None):
+        """Plot the best individual, or individuals in the multi-config case.
+        
+        Keyword Arguments:
+            folder {str/Path} -- The folder that the plots should be saved in (not filename) (default: {None})
+            cmap {str} -- The colourmap from matplotlib to use (default: {"rainbow"})
+            fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
+            save {bool} -- Whether to save the plot (or just show it). Overrides the defaults.json value for "save_plot". (default: {None})
+            remove_axis {bool} -- Whether to remove the axis to just show the clusters (default: {False})
+        """
+        # Raise error if run premmaturely
         if self.best_indiv is None:
             raise ValueError(f"No best individual is stored - have you run the generator?")
-        # Loop over the best indiv(s) (will just be 1 in single config case)
-        for config_id, best_indiv in enumerate(self.best_indiv):
-            fname = self.base_folder / "plots" / f"{config_id}_best_plot"
+        # Need to wrap the single indiv in the non-multi case
+        if self.multi_config:
+            indivs = self.best_indiv
+        else:
+            indivs = [self.best_indiv]
+        # Override config save if provided (and is a boolean)
+        if save is not None and isinstance(save, bool):
+            self.save_plot = save
+        # If they give a folder and filename, assume they want to save
+        if folder is not None and filename is not None:
+            self.save_plot = True
+        # Determine the folder for saving the plot if needed
+        if self.save_plot:
+            root = self._determine_folder(folder)
+        # Loop over the best indiv(s)
+        for config_id, best_indiv in enumerate(indivs):
+            # base_folder is not set if we aren't saving
+            if self.save_plot:
+                # Set a filename if not provided
+                if filename is None:
+                    filename = f"best_indiv"
+                # Append the config_id when there are multiple indivs
+                if len(indivs) > 1:
+                    fpath = root / f"{filename}_{config_id}"
+                else:
+                    fpath = root / f"{filename}"
+            # No saving
+            else:
+                fpath = None
             # Plot the individual
             plotting.plot_indiv(
                 best_indiv,
                 save=self.save_plot,
-                fname=fname,
+                fpath=fpath,
                 cmap=cmap,
                 fig_format=fig_format,
-                global_seed=self.seed_num
+                global_seed=self.seed_num,
+                remove_axis=remove_axis
             )
+    
+    def plot_indivs(self, indivs, nrows=None, ncols=None, folder=None, filename=None, cmap="rainbow", fig_format="png", save=None, remove_axis=False):
+        """Plot multiple indivs onto the same plot. Useful to either plot a whole population (generator.population), or multiple best_indivs in the multi-config case.
+
+        The nrows and ncols arguments are given to matplotlib's subplots function. If not given, it will be roughly calculated (the output will be close to a square).
+        """
+        # Override config save if provided (and is a boolean)
+        if save is not None and isinstance(save, bool):
+            self.save_plot = save
+        # If they give a folder and filename, assume they want to save
+        if folder is not None and filename is not None:
+            self.save_plot = True
+        # Determine the folder for saving the plot if needed
+        if self.save_plot:
+            root = self._determine_folder(folder)
+            if filename is None:
+                filename = "plot_multiple_indivs"
+            fpath = root / filename
+        else:
+            fpath = None
+        # Plot the indivs
+        plotting.plot_pop(
+            indivs,
+            nrows=nrows,
+            ncols=ncols,
+            fpath=fpath,
+            cmap=cmap,
+            fig_format=fig_format,
+            save=self.save_plot,
+            global_seed=self.seed_num,
+            remove_axis=remove_axis
+        )
 
 
 class SingleObjective(BaseGenerator):
@@ -313,6 +398,8 @@ class SingleObjective(BaseGenerator):
         if self.multi_config:
             # Initialize the container for the configs
             self.config_list = []
+            # Initialize the container for the best indivs
+            self.best_indiv = []
             # Count the number of configs to be, and get the changing params
             total_configs, key_paths, param_lists = self._count_multiconfigs()
         else:
@@ -388,7 +475,14 @@ class SingleObjective(BaseGenerator):
                     best_indiv = self._compare_individuals(
                         best_indiv, best_indiv_run
                     )
-            self.best_indiv.append(best_indiv)
+                # Keep a reference to the most recent population
+                self.population = pop
+            # Add the best_indiv in multi-config
+            if self.multi_config:
+                self.best_indiv.append(best_indiv)
+            # Or just set it as the best one
+            else:
+                self.best_indiv = best_indiv
             # Iterate the config_id
             config_id += 1
             # Append the results of this config to the overall results
@@ -414,7 +508,6 @@ class SingleObjective(BaseGenerator):
         # Plot the best for each config
         if self.plot_best:
             self.plot_best_indiv()
-        print("\nSuccess!")
     
     def get_best_dataset(self, return_config=False):
         """
@@ -437,9 +530,9 @@ class SingleObjective(BaseGenerator):
                 return best_datasets, best_labels
         else:
             if return_config:
-                return self.best_indiv[0].all_values, self.best_indiv[0].labels, self.full_config
+                return self.best_indiv.all_values, self.best_indiv.labels, self.full_config
             else:
-                return self.best_indiv[0].all_values, self.best_indiv[0].labels
+                return self.best_indiv.all_values, self.best_indiv.labels
 
     def _store_results(self, results_dict, pop, num_run, gen, num_rows, objective_dict):
         # Add some constants for this run
