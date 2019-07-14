@@ -1,5 +1,7 @@
 # HAWKS Data Generator
 
+![HAWKS Animation](examples/hawks_anim.gif)
+
 HAWKS is a tool for generating controllably difficult synthetic data, used primarily for clustering. This repo is associated with the following paper:
 
 1. Shand, C, Allmendinger, R, Handl, J, Webb, A & Keane, J 2019, Evolving Controllably Difficult Datasets for Clustering. in Proceedings of the Annual Conference on Genetic and Evolutionary Computation (GECCO '19) . The Genetic and Evolutionary Computation Conference, Prague, Czech Republic, 13/07/19. [https://doi.org/10.1145/3321707.3321761](https://doi.org/10.1145/3321707.3321761)
@@ -55,6 +57,9 @@ print(f"ARI: {ari}")
 For a more detailed explanation of the parameters and how to use HAWKS, please read the [user guide](https://github.com/sea-shunned/hawks/blob/master/user_guide.md).
 
 ## Issues
-As this work is still in development, plain sailing is not guaranteed. If you encounter an issue, first ensure that `hawks` is running as intended by navigating to the tests directory, and running `python tests.py`. If any test fails, please add details of this alongside your original problem to an issue on the [github repo]().
+As this work is still in development, plain sailing is not guaranteed. If you encounter an issue, first ensure that `hawks` is running as intended by navigating to the tests directory, and running `python tests.py`. If any test fails, please add details of this alongside your original problem to an issue on the [GitHub repo](https://github.com/sea-shunned/hawks/).
 
 ## Feature Requests
+At present, this is primarily academic work, so future developments will be released here after they have been published. If you have any suggestions or simple feature requests for HAWKS as a tool to use, please raise that on the [GitHub repo](https://github.com/sea-shunned/hawks/).
+
+If you are interested in extending this work or collaborating in an academic nature, please email cameron(dot)shand(at)manchester(dot)ac(dot)uk. 
