@@ -70,6 +70,7 @@ class Dataset:
         # **TODO** consider adding a size tuple method for some control over relative sizes
 
     def _random_clust_sizes(self):
+        # https://stackoverflow.com/questions/29187044/generate-n-random-numbers-within-a-range-with-a-constant-sum
         weights = [-np.log(self.global_rng.rand()) for _ in range(self.num_clusters)]
         sum_val = np.sum(weights)
 

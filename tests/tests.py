@@ -346,7 +346,7 @@ class ObjectiveTests(unittest.TestCase):
         for cluster in self.indiv:
             cluster.changed = False
         
-        self.indiv[0].gen_mean()
+        self.indiv[0].gen_initial_mean()
         self.indiv[0].changed = True
         aux = self.indiv.silhouette
         
@@ -416,6 +416,43 @@ class HawksTests(unittest.TestCase):
         # Pandas can be iffy with data types
         equals = np.allclose(res.values, known_result.values)
         self.assertTrue(equals)
+
+    def test_incorrect_config_arg(self):
+        with self.assertRaises(ValueError):
+            gen = hawks.create_generator(
+                {
+                    "hawks": {
+                        "seed_num": 4,
+                        "num_runs": 1
+                    },
+                    "objectives": {
+                        "silhouette": {
+                            "target": 0.9
+                        }
+                    },
+                    "constraints": {
+                        "eigenval_ratio": {
+                            "lim": "upper" # <--- error
+                        }
+                    }
+                }
+            )
+
+    def test_nested_config_arg(self):
+        gen = hawks.create_generator(
+            {
+                "constraints": {
+                    "overlap": {
+                        "limit": "TEST"
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(
+            gen.full_config["constraints"]["overlap"]["limit"],
+            "TEST"
+        )
 
 if __name__ == '__main__':
     unittest.main(buffer=True)

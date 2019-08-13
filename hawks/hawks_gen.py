@@ -8,6 +8,7 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from copy import deepcopy
+import re
 import json
 import warnings
 
@@ -83,75 +84,100 @@ class BaseGenerator:
         self.seed_num = config["hawks"]["seed_num"]
         self.save_best_data = config["hawks"]["save_best_data"]
         self.save_stats = config["hawks"]["save_stats"]
-        self.plot_best = config["hawks"]["plot_best"]
-        self.save_plot = config["hawks"]["save_plot"]
         # Initialize attributes
         self.population = None # Reference to the final pop
-        self.best_dataset = None # Array of the best dataset
-        self.best_indiv = None # Best indiv(s), Genotype object
-        self.best_config = None # Config for the best indiv
+        # self.best_dataset = None # Array of the best dataset
+        # self.best_indiv = None # Best indiv(s), Genotype object
+        self.best_each_run = [] # Best indiv from each run
+        self.datasets = None # List of datasets (for loaded generators)
+        self.label_sets = None # List of label sets (for loaded generators)
+        # self.best_config = None # Config for the best indiv
         self.base_folder = None # Folder where everything is saved
         self.global_rng = None # RandomState instance used throughout
-        self.config_list = None # Container for storing each of the configs
+        self.config_list = [] # Container for storing each of the configs
         self.stats = None # DataFrame of stats stored throughout the run
-        # Create the folder if saving is required
-        if self.any_saving:
-            self.create_folder()
 
     @staticmethod
-    def process_config(params):
+    def process_config(config):
         # Load the default config
         base_config = BaseGenerator.load_default_config()
-        # Loop through the supplied parameters
-        for first_key, value in params.items():
-            # It should be a dict of subdicts, for hawks, dataset, objective etc.
-            if isinstance(value, dict):
-                # Loop through these items
-                for second_key, param in value.items():
-                    # If not value has provided, just keep the default
-                    if param is not None:
-                        # Try setting the parameter
-                        try:
-                            _ = base_config[first_key][second_key]
-                            base_config[first_key][second_key] = param
-                        # A typo or mistake has been made
-                        except KeyError as e:
-                            raise Exception(f"'{second_key}' is not a valid key for the config (in '{first_key}' settings)") from e
-            # This should not be needed, but present in case
-            else:
-                if value is not None:
-                    try:
-                        # _ = base_config[first_key]
-                        base_config[first_key] = value
-                    except KeyError as e:
-                        raise Exception(f"'{first_key}' is not a valid key for the config") from e
+        # Check that the config has valid parameter names
+        BaseGenerator._check_config(config, base_config)
+        # Merge the default values with the supplied config
+        full_config = BaseGenerator._merge_default_config(config, base_config)
         # Check if there is a True in any of the saving parameters
-        any_saving = any([v for k, v in base_config["hawks"].items() if "save" in k])
+        any_saving = any([v for k, v in full_config["hawks"].items() if "save" in k])
         # Check if a folder name is given, and if any saving is occurring
-        if base_config["hawks"]["folder_name"] is None:
+        if full_config["hawks"]["folder_name"] is None:
             # If there is saving, create a name from the time
             if any_saving:
-                base_config["hawks"]["folder_name"] = datetime.today().strftime("%Y_%m_%d-%H%M%S")
-        return base_config, any_saving
+                full_config["hawks"]["folder_name"] = utils.get_date()
+        return full_config, any_saving
 
-    def create_folder(self):
+    @staticmethod
+    def _merge_default_config(config, defaults):
+        # Loop through defaults
+        for key in defaults:
+            # Check if the config specifies the key
+            if key in config:
+                # Recurse if needed
+                if isinstance(defaults[key], dict):
+                    BaseGenerator._merge_default_config(
+                        config[key], defaults[key]
+                    )
+            # Add from defaults if not defined
+            else:
+                config[key] = defaults[key]
+        return config
+
+    @staticmethod
+    def _check_config(config, defaults, path=None):
+        if path is None:
+            path = []
+        # Loop through given config
+        for key in config:
+            # Check that each key is in the defaults
+            if key in defaults:
+                # Recurse if needed
+                if isinstance(defaults[key], dict):
+                    BaseGenerator._check_config(
+                        config[key], defaults[key], path + [str(key)]
+                    )
+            # Raise error if it can't be found
+            else:
+                raise ValueError(f"{path + [str(key)]} is not a valid argument for the config")
+
+    def create_folders(self):
         """Create the folder(s) necessary for saving. This function is only called if any saving is specified.
         """
-        # Set the path for the base folder
-        self.base_folder = Path.cwd() / "hawks_experiments" / self.folder_name
-        # Print a warning 
+        # Create the base folder
+        self._create_base_folder()
+        # Make a datasets folder if needed
+        if self.save_best_data:
+            Path(self.base_folder / "datasets").mkdir(exist_ok=True)
+
+    def _create_base_folder(self):
+        # Create the base folder
+        if self.base_folder is None:
+            # Create a folder name if there isn't one
+            if self.folder_name is None:
+                self.folder_name = utils.get_date()
+            # Set the path for the base folder
+            # If we're already in an experiments folder, create-subfolder
+            if Path.cwd().name == "hawks_experiments":
+                self.base_folder = Path.cwd() / self.folder_name
+            # Otherwise create a folder for all experiments
+            else:
+                # Set the path for the base folder
+                self.base_folder = Path.cwd() / "hawks_experiments" / self.folder_name
+        # Print a warning if the folder exists
         if self.base_folder.is_dir():
             warnings.warn(
                 message=f"{self.base_folder} already exists - previous results may be overwritten!",
                 category=UserWarning
             )
+        # Make the folder
         self.base_folder.mkdir(exist_ok=True, parents=True)
-        # Make a datasets folder if needed
-        if self.save_best_data:
-            Path(self.base_folder / "datasets").mkdir(exist_ok=True)
-        # Make a plots folder is need be
-        if self.save_plot:
-            Path(self.base_folder / "plots").mkdir(exist_ok=True)
 
     @staticmethod
     def load_default_config():
@@ -211,14 +237,6 @@ class BaseGenerator:
         """Return the stats (pandas DataFrame), useful in an interactive setting
         """
         return self.stats
-    
-    def save_stats_csv(self, fpath):
-        """Save the stats DataFrame to the specified location
-        """
-        self.stats.to_csv(
-            Path(fpath),
-            index=False
-        )
 
     def get_config(self):
         """Return the full config, useful in an interactive setting
@@ -267,6 +285,10 @@ class BaseGenerator:
             total_configs = None
         return total_configs, key_paths, param_lists
 
+    def increment_seed(self, num_run):
+        # Super special seed selection
+        return self.seed_num + (num_run * 10)
+
     def set_global_rng(self, num_seed):
         # Create the RandomState instance
         self.global_rng = np.random.RandomState(num_seed)
@@ -285,143 +307,170 @@ class BaseGenerator:
     def _compare_individuals(indiv1, indiv2):
         raise NotImplementedError
 
-    def _determine_folder(self, folder):
-        """Determine the save location
-        """
-        # If no directory was given, set one
-        if folder is None:
-            # Use the base_folder is available
-            try:
-                root = self.base_folder / "plots"
-            # If the base_folder is not set, use the current working directory
-            except TypeError:
-                root = Path.cwd()
-        # Convert the folder to a path
+    @staticmethod
+    def gen_from_folder(folder_path):
+        # If it's not a Path, make it one
+        if not isinstance(folder_path, Path):
+            folder_path = Path(folder_path)
+        # If it's not a directory, we can't do anything
+        if not folder_path.is_dir():
+            raise ValueError(f"{folder_path} is not an existing folder")
+        # First select the config
+        config_path = list(folder_path.glob(f"_config.json"))
+        if len(config_path) > 1:
+            raise ValueError("More than one config found - unsure which is the main one.")
         else:
-            root = Path(folder)                    
-        return root
+            config_path = config_path[0]
+        # Create the generator object
+        gen = create_generator(config_path)
+        # Set the base_folder to be the folder we're in
+        gen.base_folder = folder_path
+        # Then select the stats
+        stats_path = list(folder_path.glob(f"hawks_stats.csv"))
+        if len(stats_path) > 1:
+            raise ValueError("More than one stats csv found, unsure which is the main one.")
+        else:
+            stats_path = stats_path[0]
+        # Load the stats CSV
+        gen.stats = pd.read_csv(
+            stats_path,
+            index_col=False
+        )
+        # Then check for a datasets folder
+        datasets_path = list(folder_path.glob("datasets"))[0]
+        ### Need to handle the case where it doesn't work here instead ###
+        # Get the paths of all of the datasets
+        dataset_paths = datasets_path.glob("*")
+        # Sort these paths according to the number
+        # https://stackoverflow.com/a/36202926/9963224
+        dataset_paths.sort(key=lambda var:[int(x) if x.isdigit() else x for x in re.findall(r'[^0-9]|[0-9]+', str(var))])
+        
+        ##### CHECK FOR MANY CONFIGS AND OR MANY RUNS
 
-    def plot_best_indiv(self, folder=None, cmap="rainbow", fig_format="png", save=None, remove_axis=False, filename=None):
-        """Plot the best individual, or individuals in the multi-config case.
+    def _plot_save_setup(self):
+        # Check if the base_folder was ever set
+        if self.base_folder is None:
+            # Create it
+            self._create_base_folder()
+        # Create the plots folder
+        plot_folder = Path(self.base_folder / "plots")
+        plot_folder.mkdir(exist_ok=True, parents=True)
+        return plot_folder
+
+    def plot_best_indivs(self, cmap="rainbow", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
+        """Plot the best individuals from each run, for each config.
+        
+        A separate plot is made for each config, with the best from each run plotted together.
         
         Keyword Arguments:
-            folder {str/Path} -- The folder that the plots should be saved in (not filename) (default: {None})
             cmap {str} -- The colourmap from matplotlib to use (default: {"rainbow"})
             fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
-            save {bool} -- Whether to save the plot (or just show it). Overrides the defaults.json value for "save_plot". (default: {None})
+            save {bool} -- Save the plot. (default: {None})
+            show {bool} -- Show the plot (default: {True})
             remove_axis {bool} -- Whether to remove the axis to just show the clusters (default: {False})
+            filename {str} -- Filename (constructed if None) (default: {None})
+            fig_title {str} -- Figure title (default: {None})
+            nrows {int} -- Number of rows for plt.subplots, calculated if None (default: {None})
+            ncols {int} -- Number of columns for plt.subplots, calculated if None (default: {None})
         """
         # Raise error if run premmaturely
-        if self.best_indiv is None:
-            raise ValueError(f"No best individual is stored - have you run the generator?")
-        # Need to wrap the single indiv in the non-multi case
-        if self.multi_config:
-            indivs = self.best_indiv
-        else:
-            indivs = [self.best_indiv]
-        # Override config save if provided (and is a boolean)
-        if save is not None and isinstance(save, bool):
-            self.save_plot = save
-        # If they give a folder and filename, assume they want to save
-        if folder is not None and filename is not None:
-            self.save_plot = True
-        # Determine the folder for saving the plot if needed
-        if self.save_plot:
-            root = self._determine_folder(folder)
-        # Loop over the best indiv(s)
-        for config_id, best_indiv in enumerate(indivs):
-            # base_folder is not set if we aren't saving
-            if self.save_plot:
-                # Set a filename if not provided
-                if filename is None:
-                    filename = f"best_indiv"
-                # Append the config_id when there are multiple indivs
-                if len(indivs) > 1:
-                    fpath = root / f"{filename}_{config_id}"
-                else:
-                    fpath = root / f"{filename}"
-            # No saving
-            else:
+        if self.best_each_run is None:
+            raise ValueError(f"No best individuals are stored - have you run the generator?")
+        # Sort out folders if saving
+        if save:
+            plot_folder = self._plot_save_setup()
+        # Loop over the configs
+        for config_id, config_set in enumerate(self.best_each_run):
+            # Get the path if saving
+            if save:
+                # Construct filename if not supplied
+                if filename is not None:
+                    filename = f"config-{config_id}_best-indivs"
+                # Concatenate whole path
+                fpath = plot_folder / filename
+            else: 
                 fpath = None
-            # Plot the individual
-            plotting.plot_indiv(
-                best_indiv,
-                save=self.save_plot,
+            # Plot the indivs for this config
+            plotting.plot_pop(
+                config_set,
+                nrows=nrows,
+                ncols=ncols,
                 fpath=fpath,
                 cmap=cmap,
                 fig_format=fig_format,
+                save=save,
+                show=show,
                 global_seed=self.seed_num,
-                remove_axis=remove_axis
-            )
-    
-    def plot_indivs(self, indivs, nrows=None, ncols=None, folder=None, filename=None, cmap="rainbow", fig_format="png", save=None, remove_axis=False):
-        """Plot multiple indivs onto the same plot. Useful to either plot a whole population (generator.population), or multiple best_indivs in the multi-config case.
+                remove_axis=remove_axis,
+                fig_title=fig_title
+            )            
 
-        The nrows and ncols arguments are given to matplotlib's subplots function. If not given, it will be roughly calculated (the output will be close to a square).
-        """
-        # Override config save if provided (and is a boolean)
-        if save is not None and isinstance(save, bool):
-            self.save_plot = save
-        # If they give a folder and filename, assume they want to save
-        if folder is not None and filename is not None:
-            self.save_plot = True
-        # Determine the folder for saving the plot if needed
-        if self.save_plot:
-            root = self._determine_folder(folder)
-            if filename is None:
-                filename = "plot_multiple_indivs"
-            fpath = root / filename
-        else:
-            fpath = None
-        # Plot the indivs
-        plotting.plot_pop(
-            indivs,
-            nrows=nrows,
-            ncols=ncols,
-            fpath=fpath,
-            cmap=cmap,
-            fig_format=fig_format,
-            save=self.save_plot,
-            global_seed=self.seed_num,
-            remove_axis=remove_axis
-        )
+    # def plot_indivs(self, indivs, cmap="rainbow", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
+    #     """Plot multiple indivs onto the same plot.
+
+    #     The nrows and ncols arguments are given to matplotlib's subplots function. If not given, it will be roughly calculated (the output will be close to a square).
+    #     """
+    #     # Sort out folders if saving
+    #     if save:
+    #         plot_folder = self._plot_save_setup()
+    #         # Set the file name if not given
+    #         if filename is None:
+    #             filename = "plot_multiple_indivs"
+    #         fpath = plot_folder / filename
+    #     else:
+    #         fpath = None
+    #     # Plot the indivs
+    #     plotting.plot_pop(
+    #         indivs,
+    #         nrows=nrows,
+    #         ncols=ncols,
+    #         fpath=fpath,
+    #         cmap=cmap,
+    #         fig_format=fig_format,
+    #         save=save,
+    #         show=show,
+    #         global_seed=self.seed_num,
+    #         remove_axis=remove_axis,
+    #         fig_title=fig_title
+    #     )
 
 
 class SingleObjective(BaseGenerator):
-    def __init__(self, params, any_saving, multi_config):
-        super().__init__(params, any_saving, multi_config)
+    def __init__(self, config, any_saving, multi_config):
+        super().__init__(config, any_saving, multi_config)
 
-    def run(self):
-        # Setup a dataframe for storing stats
-        self.stats = pd.DataFrame()
-        # Get the number of configs for tqdm (and specifics for multi-config)
-        if self.multi_config:
-            # Initialize the container for the configs
-            self.config_list = []
-            # Initialize the container for the best indivs
-            self.best_indiv = []
-            # Count the number of configs to be, and get the changing params
-            total_configs, key_paths, param_lists = self._count_multiconfigs()
-        else:
-            total_configs, key_paths, param_lists = 1, None, None
+    def _setup(self):
         # Create a seed if one was not provided
         if self.seed_num is None:
             self.seed_num = datetime.now().microsecond
             self.full_config["hawks"]["seed_num"] = self.seed_num
-        # Save the full config if any saving is happening
+        # Create folders if required and save full config
         if self.any_saving:
+            self.create_folders()
             # Save the now completed full config
             self.save_config(self.full_config, folder=self.base_folder)
+        # Setup a dataframe for storing stats
+        self.stats = pd.DataFrame()
+        # Get the number of configs for tqdm (and specifics for multi-config)
+        if self.multi_config:
+            # Count the number of configs to be, and get the changing params
+            total_configs, key_paths, param_lists = self._count_multiconfigs()
+        else:
+            total_configs, key_paths, param_lists = 1, None, None
+        return total_configs, key_paths, param_lists
+
+    def run(self):
+        total_configs, key_paths, param_lists = self._setup()
         # Initialize the config_id
         config_id = 0
         # Loop over each config
         for params, config in tqdm(self._get_configs(key_paths, param_lists), desc="Configs", total=total_configs):
-            # If there are multiple configs, store the individual ones in a list
-            if self.multi_config:
-                # Add the config to the list
-                self.config_list.append(config)
+            # Add the config to the list
+            self.config_list.append(config)
+            # Add a list as container for new runs
+            self.best_each_run.append([])
             # Local ref to best for each config
-            best_indiv = None
+            best_indiv_run = None
             # Setup the containers for storing results
             num_rows = config["ga"]["num_indivs"]
             results_dict = defaultdict(list)
@@ -434,8 +483,8 @@ class SingleObjective(BaseGenerator):
                     results_dict[name] += [param]*(num_rows*config["ga"]["num_gens"]*self.num_runs)
             # Loop over each run
             for num_run in tqdm(range(self.num_runs), desc="Runs", leave=False):
-                # Super special seed selection
-                global_seed = self.seed_num + (num_run * 10)
+                # Increment the seed for this run
+                global_seed = self.increment_seed(num_run)
                 # Create the RandomState instance
                 self.set_global_rng(global_seed)
                 # Create the Dataset instance
@@ -465,74 +514,92 @@ class SingleObjective(BaseGenerator):
                     results_dict = self._store_results(
                         results_dict, pop, num_run, gen, num_rows, objective_dict
                     )
-                # Get the best indiv for this particular run
-                # Use max with the weighted values to generalize to minimization and maximation (in the single-objective case)
-                best_indiv_run = max(pop, key=lambda x: x.fitness.wvalues)
-                # Compare to the current best if there is one
-                if best_indiv is None:
-                    best_indiv = best_indiv_run
+                # Want to now get the best indiv for this particular run
+                # Turn the weighted fitnesses into an array
+                # As single-objective, we extract the only value from tuple
+                fitnesses = np.array([x.fitness.wvalues[0] for x in pop])
+                # Get the indices of the best individuals
+                best_indices = np.argwhere(fitnesses == np.max(fitnesses)).flatten().tolist()
+                # Select first indiv as the best one
+                best_indiv_run = pop[best_indices[0]]
+                # If there is more than one, compare with the others
+                if len(best_indices) > 1:
+                    # Iteratively compare against others, taking best from each
+                    for curr_index in best_indices[1:]:
+                        best_indiv_run = self._compare_individuals(
+                            pop[curr_index], best_indiv_run
+                        )
+                    # Get the index of the best individual
+                    best_index = pop.index(best_indiv_run)
                 else:
-                    best_indiv = self._compare_individuals(
-                        best_indiv, best_indiv_run
-                    )
+                    best_index = best_indices[0]
+                # Store the best indiv from each run
+                self.best_each_run[-1].append(best_indiv_run)
+                # Add column to show best dataset from run
+                results_dict = self._store_best_indiv(
+                    results_dict, best_index, config["ga"]["num_gens"], num_rows
+                )
                 # Keep a reference to the most recent population
                 self.population = pop
-            # Add the best_indiv in multi-config
-            if self.multi_config:
-                self.best_indiv.append(best_indiv)
-            # Or just set it as the best one
-            else:
-                self.best_indiv = best_indiv
             # Iterate the config_id
             config_id += 1
             # Append the results of this config to the overall results
             self.stats = self.stats.append(
                 pd.DataFrame.from_dict(results_dict), ignore_index=True
             )
-            # Save after each config just in case
-            if self.save_stats:
-                # Save to CSV
-                self.save_stats_csv(
-                    self.base_folder / "hawks_stats.csv"
-                )
-            # Save the best individual(s) and their associated config(s)
-            if self.save_best_data:
-                # Make a folder for the datasets
-                dataset_folder = self.base_folder / "datasets"
-                # Save the best data
-                best_indiv.save_clusters(dataset_folder, f"{config_id}_best_data")
-                # If there are multiple configs then save the specific one for each of the best datasets
-                if self.multi_config:
-                    # Save the associated config
-                    self.save_config(config, folder=dataset_folder, filename=f"{config_id}_config")
-        # Plot the best for each config
-        if self.plot_best:
-            self.plot_best_indiv()
-    
+        # Save the stats for this run if specified
+        if self.save_stats:
+            # Save to CSV
+            utils.df_to_csv(
+                df=self.stats,
+                path=self.base_folder,
+                filename="hawks_stats"
+            )
+        # Save the best individual(s) and their associated config(s)
+        if self.save_best_data:
+            # Loop over each indiv in each config
+            for config_num, indiv_list in enumerate(self.best_each_run):
+                for run_num, indiv in enumerate(indiv_list):
+                    # Save the best data
+                    indiv.save_clusters(
+                        folder=self.base_folder / "datasets",
+                        fname=f"config-{config_num}_run-{run_num}_best_data"
+                    )
+
     def get_best_dataset(self, return_config=False):
         """
-        Function for getting the data and labels of the best dataset for everyone run per config.
+        Function for getting the data and labels of the best dataset for every run per config.
 
-        In the single config case, the data and labels of the best individual are returned, and the config if specified.
+        A list of the datasets (numpy arrays) and a list of the labels are returned. If specified, a list of the associated configs are also returned.
 
-        In the multi-config case, a list of these things are returned instead, for each of the configs specified. Returning the config is advised here so it is clear what parameters are associated with the returned data and labels of the same index.
+        Note that these lists are flattened. In the single config case, the list of datasets will be `num_runs` long. In the multi_config case, a list of length `num_runs`*`len(self.config_list)` will be returned. 
+        
+        Returning the config is advised in the multi-config setting so it is clear what parameters are associated with the returned data and labels of the same index.
         """
-        # Check if multi_config or not
-        if self.multi_config:
-            # Get the dataset for the best_indiv for each config
-            best_datasets = [indiv.all_values for indiv in self.best_indiv]
-            # Same for labels
-            best_labels = [indiv.labels for indiv in self.best_indiv]
-            # Return the data, labels and config if specified
-            if return_config:
-                return best_datasets, best_labels, self.config_list
-            else:
-                return best_datasets, best_labels
+        # Get the dataset for the best_indiv for each config
+        datasets = [indiv.all_values for config_list in self.best_each_run for indiv in config_list]
+        # Same for labels
+        label_sets = [indiv.labels for config_list in self.best_each_run for indiv in config_list]
+        # Return the configs if specified
+        if return_config:
+            return datasets, label_sets, self.config_list
         else:
-            if return_config:
-                return self.best_indiv.all_values, self.best_indiv.labels, self.full_config
-            else:
-                return self.best_indiv.all_values, self.best_indiv.labels
+            return datasets, label_sets
+
+    def _best_across_runs(self):
+        # Create container
+        best_indivs = []
+        # Loop through the best from each run for each config
+        for best_in_config in self.best_each_run:
+            # Select the first indiv
+            best_indiv = best_in_config[0]
+            # Compare against the others
+            for indiv in best_in_config[1:]:
+                best_indiv = self._compare_individuals(best_indiv, indiv)
+            # Get the index
+            index = best_in_config.index(best_indiv)
+            best_indivs.append((best_indiv, index))
+        return best_indivs
 
     def _store_results(self, results_dict, pop, num_run, gen, num_rows, objective_dict):
         # Add some constants for this run
@@ -542,10 +609,19 @@ class SingleObjective(BaseGenerator):
         # Store the results for each individual in the pop
         for indiv in pop:
             for i, obj_name in enumerate(objective_dict):
-                results_dict[obj_name] += [getattr(indiv, obj_name)] 
+                results_dict[obj_name] += [getattr(indiv, obj_name)]
                 results_dict[f"fitness_{obj_name}"] += [indiv.fitness.values[i]]
             for constraint, value in indiv.constraints.items():
                 results_dict[constraint] += [value]
+        return results_dict
+
+    def _store_best_indiv(self, results_dict, best_index, num_gens, num_rows):
+        # Create a whole column of 0s
+        best_indiv_column = [0]*num_rows*num_gens
+        # Best indiv is in last generation only
+        best_indiv_column[(num_gens-1)*num_rows+best_index] = 1
+        # Add the column to the results_dict
+        results_dict["best_indiv"] += best_indiv_column
         return results_dict
 
     def _compare_individuals(self, indiv1, indiv2):
@@ -566,3 +642,73 @@ class SingleObjective(BaseGenerator):
             return indiv1
         else:
             return indiv2
+
+    def animate(self):
+        # Raise error if multi-config specified
+        if self.multi_config:
+            raise ValueError(f"Animation is not implemented for multi-config")
+        # Perform initial setup
+        total_configs, key_paths, param_lists = self.setup()
+        # Initialize the config_id
+        config_id = 0
+        # Loop over each config
+        for _, config in tqdm(self._get_configs(key_paths, param_lists), desc="Configs", total=total_configs):
+            # Loop over each run
+            for num_run in tqdm(range(self.num_runs), desc="Runs", leave=False):
+                animate_folder = self.base_folder / "plots" / f"animate_config{config_id}_run{num_run}"
+                animate_folder.mkdir(exist_ok=True, parents=True)
+                # Super special seed selection
+                global_seed = self.increment_seed(num_run)
+                # Create the RandomState instance
+                self.set_global_rng(global_seed)
+                # Create the Dataset instance
+                dataset_obj = prepare.setup_dataset(config["dataset"])
+                # Setup the GA
+                _, ga_params, toolbox, pop = prepare.setup_ga(
+                    config["ga"],
+                    config["constraints"],
+                    config["objectives"],
+                    dataset_obj
+                )
+                self.plot_indivs(
+                    pop,
+                    folder=animate_folder,
+                    filename=f"gen-0",
+                    cmap="plasma",
+                    fig_format="png",
+                    save=True,
+                    remove_axis=True,
+                    fig_title=f"Gen 0"
+                )
+                # Go through each generation
+                for gen in tqdm(
+                        range(1, ga_params["num_gens"]),
+                        desc="Generations", leave=False
+                    ):
+                    pop = ga.generation(
+                        pop,
+                        toolbox,
+                        config["constraints"]
+                    )
+                    self.plot_indivs(
+                        pop,
+                        folder=animate_folder,
+                        filename=f"gen-{gen}",
+                        cmap="plasma",
+                        fig_format="png",
+                        save=True,
+                        remove_axis=True,
+                        fig_title=f"Gen {gen}"
+                    )
+
+    def step(self, generations):
+        ### Is this really necessary? ###
+        if self.multi_config:
+            raise ValueError(f"Cannot run step function in multi_config mode")
+        # Perform the initialization of the generator if this is not done
+        # This allows step to be called multiple times, and also for the first time
+        if self.something is None:
+            self.initialize()
+        # Run the specified number of gens
+        for i in range(generations):
+            self._generation()

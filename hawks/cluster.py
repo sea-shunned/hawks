@@ -14,6 +14,10 @@ class Cluster:
     id_value = count()
     # Global RandomState reference
     global_rng = None
+    # #
+    # num_dims = None
+    # num_clusters = None
+    # cluster_sizes = None
     def __init__(self, size):
         # The cluster size (num data points)
         self.size = size
@@ -42,7 +46,7 @@ class Cluster:
         # Set the random state (using the seed)
         self.set_state()
         # Generate the mean/centroid of the cluster
-        self.gen_mean()
+        self.gen_initial_mean()
         # Generate the initial covariance for the cluster
         self.gen_initial_cov()
         # Generate an initial rotation matrix for the covariance
@@ -62,7 +66,7 @@ class Cluster:
         """
         self.clust_randstate = np.random.RandomState(self.num_seed)
     
-    def gen_mean(self):
+    def gen_initial_mean(self):
         """Generate the mean vector for the cluster. Uses the class variables taken from the relevant Dataset instance to generate the mean.
         """
         # Try to generate the mean (using a uniform distribution)
