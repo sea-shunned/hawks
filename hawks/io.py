@@ -1,9 +1,13 @@
 from pathlib import Path
+import warnings
 import re
 
 import numpy as np
+import pandas as pd
 
-def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=False, labels_filename=True, **kwargs):
+import hawks.generator
+
+def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, labels_filename=False, **kwargs):
     """Function to load datasets from an external source. The path to the folder is given, and by default all .csvs are used. The labels for the data can be specified as a separate file, or final column of the data.
 
     Any extra kwargs are passed to np.loadtxt, which loads the data in.
@@ -13,8 +17,8 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=False, la
 
     Keyword Arguments:
         glob_filter {str} -- Select the files in the folder using this filter (default: {"*.csv"})
-        labels_last_column {bool} -- If the labels are in the last column or not (default: {False})
-        labels_filename {bool} -- If the labels are in a separate file (with 'labels' in the filename) (default: {True})
+        labels_last_column {bool} -- If the labels are in the last column or not (default: {True})
+        labels_filename {bool} -- If the labels are in a separate file (with 'labels' in the filename) (default: {False})
 
     Returns:
         filenames {list} -- A list ofr the name for each loaded file
@@ -66,3 +70,57 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=False, la
             datasets.append(data[:, :-1])
     # Return the datasets and associated labels
     return filenames, datasets, label_sets
+
+def load_folder(folder_path):
+    """Creates a generator object from a folder (previously created by the generator).
+
+    Arguments:
+        folder_path {str, Path} -- Name or path to a previously generated folder
+
+    Returns:
+        BaseGenerator -- A generator of the subclass specified in the config
+    """
+    # If it's not a Path, make it one
+    if not isinstance(folder_path, Path):
+        folder_path = Path(folder_path)
+    # If it's not a directory, we can't do anything
+    if not folder_path.is_dir():
+        raise ValueError(f"{folder_path} is not an existing folder")
+    # First select the config
+    config_path = list(folder_path.glob("*_config.json"))
+    if len(config_path) > 1:
+        raise ValueError("More than one config found - unsure which is the main one.")
+    else:
+        config_path = config_path[0]
+    # Create the generator object
+    gen = hawks.generator.create_generator(config_path)
+    # Set the base_folder to be the folder we're in
+    gen.base_folder = folder_path
+    # Setup the generator
+    _, key_paths, param_lists = gen._setup()
+    # Get all the config(s)
+    for _, config in gen._get_configs(key_paths, param_lists):
+        gen.config_list.append(config)
+    # Then select the stats
+    stats_path = list(folder_path.glob(f"hawks_stats.csv"))
+    if len(stats_path) > 1:
+        raise ValueError("More than one stats csv found, unsure which is the main one.")
+    else:
+        stats_path = stats_path[0]
+    # Load the stats CSV
+    gen.stats = pd.read_csv(
+        stats_path,
+        index_col=False
+    )
+    # Load the datasets
+    dataset_paths = list(folder_path.glob("datasets/*"))
+    # Check if there is actually anything to load
+    if dataset_paths:
+        # Load the datasets in
+        _, gen.datasets, gen.label_sets = load_datasets(folder_path/"datasets", delimiter=",")
+    else:
+        warnings.warn(
+            message=f"No datasets were found to load",
+            category=UserWarning
+        )
+    return gen

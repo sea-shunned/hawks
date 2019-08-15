@@ -80,10 +80,11 @@ def run_clustering(generator=None, datasets=None, label_sets=None, subset=None, 
         base_folder = generator.base_folder
     # Extract the datasets and labels from the generator
     if generator is not None:
-        datasets, label_sets = generator.get_best_dataset()
+        # Create local references to datasets and label_sets
+        datasets, label_sets, configs = generator.get_best_dataset(return_config=True)
         # Get a flat list of the config id for each one of the datasets
         config_nums = np.arange(
-            len(generator.best_each_run)
+            len(configs)
         ).repeat(
             generator.full_config["hawks"]["num_runs"]
         ).tolist()

@@ -8,7 +8,6 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from copy import deepcopy
-import re
 import json
 import warnings
 
@@ -89,13 +88,14 @@ class BaseGenerator:
         # self.best_dataset = None # Array of the best dataset
         # self.best_indiv = None # Best indiv(s), Genotype object
         self.best_each_run = [] # Best indiv from each run
-        self.datasets = None # List of datasets (for loaded generators)
-        self.label_sets = None # List of label sets (for loaded generators)
+        self.datasets = None # Easy reference to datasets in .best_each_run
+        self.label_sets = None # Easy reference to labels in .best_each_run
         # self.best_config = None # Config for the best indiv
         self.base_folder = None # Folder where everything is saved
         self.global_rng = None # RandomState instance used throughout
         self.config_list = [] # Container for storing each of the configs
         self.stats = None # DataFrame of stats stored throughout the run
+        self.deap_toolbox = None # Reference to DEAP's toolbox for working with single indivs
 
     @staticmethod
     def process_config(config):
@@ -295,57 +295,17 @@ class BaseGenerator:
         # Give access to it from the classes
         Cluster.global_rng = self.global_rng
         Dataset.global_rng = self.global_rng
-        Genotype.global_rng = self.global_rng        
+        Genotype.global_rng = self.global_rng
 
     def run(self):
         raise NotImplementedError
 
-    def get_best_dataset(self, return_config=False):
-        raise NotImplementedError
-    
-    @staticmethod
-    def _compare_individuals(indiv1, indiv2):
+    def get_best_dataset(self, return_config, reset):
         raise NotImplementedError
 
     @staticmethod
-    def gen_from_folder(folder_path):
-        # If it's not a Path, make it one
-        if not isinstance(folder_path, Path):
-            folder_path = Path(folder_path)
-        # If it's not a directory, we can't do anything
-        if not folder_path.is_dir():
-            raise ValueError(f"{folder_path} is not an existing folder")
-        # First select the config
-        config_path = list(folder_path.glob(f"_config.json"))
-        if len(config_path) > 1:
-            raise ValueError("More than one config found - unsure which is the main one.")
-        else:
-            config_path = config_path[0]
-        # Create the generator object
-        gen = create_generator(config_path)
-        # Set the base_folder to be the folder we're in
-        gen.base_folder = folder_path
-        # Then select the stats
-        stats_path = list(folder_path.glob(f"hawks_stats.csv"))
-        if len(stats_path) > 1:
-            raise ValueError("More than one stats csv found, unsure which is the main one.")
-        else:
-            stats_path = stats_path[0]
-        # Load the stats CSV
-        gen.stats = pd.read_csv(
-            stats_path,
-            index_col=False
-        )
-        # Then check for a datasets folder
-        datasets_path = list(folder_path.glob("datasets"))[0]
-        ### Need to handle the case where it doesn't work here instead ###
-        # Get the paths of all of the datasets
-        dataset_paths = datasets_path.glob("*")
-        # Sort these paths according to the number
-        # https://stackoverflow.com/a/36202926/9963224
-        dataset_paths.sort(key=lambda var:[int(x) if x.isdigit() else x for x in re.findall(r'[^0-9]|[0-9]+', str(var))])
-        
-        ##### CHECK FOR MANY CONFIGS AND OR MANY RUNS
+    def _compare_individuals(indiv1, indiv2):
+        raise NotImplementedError
 
     def _plot_save_setup(self):
         # Check if the base_folder was ever set
@@ -405,35 +365,24 @@ class BaseGenerator:
                 fig_title=fig_title
             )            
 
-    # def plot_indivs(self, indivs, cmap="rainbow", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
-    #     """Plot multiple indivs onto the same plot.
-
-    #     The nrows and ncols arguments are given to matplotlib's subplots function. If not given, it will be roughly calculated (the output will be close to a square).
-    #     """
-    #     # Sort out folders if saving
-    #     if save:
-    #         plot_folder = self._plot_save_setup()
-    #         # Set the file name if not given
-    #         if filename is None:
-    #             filename = "plot_multiple_indivs"
-    #         fpath = plot_folder / filename
-    #     else:
-    #         fpath = None
-    #     # Plot the indivs
-    #     plotting.plot_pop(
-    #         indivs,
-    #         nrows=nrows,
-    #         ncols=ncols,
-    #         fpath=fpath,
-    #         cmap=cmap,
-    #         fig_format=fig_format,
-    #         save=save,
-    #         show=show,
-    #         global_seed=self.seed_num,
-    #         remove_axis=remove_axis,
-    #         fig_title=fig_title
-    #     )
-
+    def create_individual(self):
+        """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
+        """
+        if self.multi_config:
+            raise ValueError(f"Not available in multi_config mdoe - Need a single config to generate an individual from")
+        # Create the RandomState instance
+        self.set_global_rng(self.seed_num)
+        # Create the Dataset instance
+        dataset_obj = prepare.setup_dataset(self.full_config["dataset"])
+        # Setup the GA
+        objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+            self.full_config["ga"],
+            self.full_config["constraints"],
+            self.full_config["objectives"],
+            dataset_obj
+        )
+        # Take from the initial population
+        yield from pop
 
 class SingleObjective(BaseGenerator):
     def __init__(self, config, any_saving, multi_config):
@@ -490,7 +439,7 @@ class SingleObjective(BaseGenerator):
                 # Create the Dataset instance
                 dataset_obj = prepare.setup_dataset(config["dataset"])
                 # Setup the GA
-                objective_dict, ga_params, toolbox, pop = prepare.setup_ga(
+                objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
                     config["ga"],
                     config["constraints"],
                     config["objectives"],
@@ -507,7 +456,7 @@ class SingleObjective(BaseGenerator):
                     ):
                     pop = ga.generation(
                         pop,
-                        toolbox,
+                        self.deap_toolbox,
                         config["constraints"]
                     )
                     # Store results from each generation
@@ -566,25 +515,27 @@ class SingleObjective(BaseGenerator):
                         fname=f"config-{config_num}_run-{run_num}_best_data"
                     )
 
-    def get_best_dataset(self, return_config=False):
+    def get_best_dataset(self, return_config=False, reset=False):
         """
-        Function for getting the data and labels of the best dataset for every run per config.
+        Function for extracting the data and labels of the best dataset for every run per config.
 
         A list of the datasets (numpy arrays) and a list of the labels are returned. If specified, a list of the associated configs are also returned.
 
-        Note that these lists are flattened. In the single config case, the list of datasets will be `num_runs` long. In the multi_config case, a list of length `num_runs`*`len(self.config_list)` will be returned. 
-        
-        Returning the config is advised in the multi-config setting so it is clear what parameters are associated with the returned data and labels of the same index.
+        Note that these lists are flattened. In the single config case, the list of datasets will be `num_runs` long. In the multi_config case, a list of length `num_runs`*`len(self.config_list)` will be returned.
+
+        If the datasets or label_sets have not already been extracted then they are. There is a flag to reset this in case .best_each_run has changed.
         """
         # Get the dataset for the best_indiv for each config
-        datasets = [indiv.all_values for config_list in self.best_each_run for indiv in config_list]
+        if self.datasets is None or reset:
+            self.datasets = [indiv.all_values for config_list in self.best_each_run for indiv in config_list]
         # Same for labels
-        label_sets = [indiv.labels for config_list in self.best_each_run for indiv in config_list]
+        if self.label_sets is None or reset:
+            self.label_sets = [indiv.labels for config_list in self.best_each_run for indiv in config_list]
         # Return the configs if specified
         if return_config:
-            return datasets, label_sets, self.config_list
+            return self.datasets, self.label_sets, self.config_list
         else:
-            return datasets, label_sets
+            return self.datasets, self.label_sets
 
     def _best_across_runs(self):
         # Create container
@@ -664,7 +615,7 @@ class SingleObjective(BaseGenerator):
                 # Create the Dataset instance
                 dataset_obj = prepare.setup_dataset(config["dataset"])
                 # Setup the GA
-                _, ga_params, toolbox, pop = prepare.setup_ga(
+                _, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
                     config["ga"],
                     config["constraints"],
                     config["objectives"],
@@ -687,7 +638,7 @@ class SingleObjective(BaseGenerator):
                     ):
                     pop = ga.generation(
                         pop,
-                        toolbox,
+                        self.deap_toolbox,
                         config["constraints"]
                     )
                     self.plot_indivs(
