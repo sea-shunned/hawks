@@ -179,6 +179,9 @@ def parental_selection(pop, offspring_size):
         parents.append(
             (pop[index1], pop[index2])
         )
+    # Duplicate if we have a pop size of 1
+    if not parents:
+        parents = [(pop[0], pop[0])]
     return parents
 
 def stochastic_ranking(pop, ga_params):
