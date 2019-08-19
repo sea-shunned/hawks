@@ -176,6 +176,10 @@ class Genotype(list):
             # Test for swapping the covariance
             if Genotype.global_rng.rand() < cxpb:
                 parent1[i].cov, parent2[i].cov = parent2[i].cov, parent1[i].cov
+                # # Also swap the rotation matrix (as it's part of the cov)
+                # parent1[i].rotation, parent2[i].rotation = parent2[i].rotation, parent1[i].rotation
+                # # Also swap the seed, as this affects the covariance most
+                # parent1[i].num_seed, parent2[i].num_seed = parent2[i].num_seed, parent1[i].num_seed
                 change = True
             # Link the cluster to its new genotype
             if change:
