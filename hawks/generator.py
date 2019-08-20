@@ -276,11 +276,13 @@ class BaseGenerator:
             total_configs = len(list(product(*param_lists)))
             if total_configs * self.num_runs > 1000:
                 warnings.warn(
-                    f"{total_configs} configs will be generated, each with {self.num_runs} runs - this might take a while..."
+                    message=f"{total_configs} configs will be generated, each with {self.num_runs} runs - this might take a while...",
+                    category=UserWarning
                 )
         except MemoryError:
             warnings.warn(
-                    f"So many configs are being created that it caused a MemoryError. Did you configure this experiment correctly?"
+                    message=f"So many configs are being created that it caused a MemoryError. Did you configure this experiment correctly?",
+                    category=UserWarning
                 )
             total_configs = None
         return total_configs, key_paths, param_lists
