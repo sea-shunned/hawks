@@ -7,7 +7,7 @@ import pandas as pd
 
 import hawks.generator
 
-def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, labels_filename=False, **kwargs):
+def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, labels_filename=False, custom_func=None, **kwargs):
     """Function to load datasets from an external source. The path to the folder is given, and by default all .csvs are used. The labels for the data can be specified as a separate file, or final column of the data.
 
     Any extra kwargs are passed to np.loadtxt, which loads the data in.
@@ -19,9 +19,10 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, lab
         glob_filter {str} -- Select the files in the folder using this filter (default: {"*.csv"})
         labels_last_column {bool} -- If the labels are in the last column or not (default: {True})
         labels_filename {bool} -- If the labels are in a separate file (with 'labels' in the filename) (default: {False})
+        custom_func {func} -- Function for processing the data directly, useful if it's a special case. Must return filenames, datasets, and corresponding labels.
 
     Returns:
-        filenames {list} -- A list ofr the name for each loaded file
+        filenames {list} -- A list of the filenames for each loaded file
         datasets {list} -- A list of the loaded datsets
         label_sets {list} -- A list of the labels
     """
@@ -44,31 +45,36 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, lab
     # Get the files according to the filter provided
     files = list(folder_path.glob(glob_filter))
     # Sort them files (avoids needing leading 0s)
+    # https://stackoverflow.com/a/36202926/9963224
     files.sort(key=lambda var:[int(x) if x.isdigit() else x for x in re.findall(r'[^0-9]|[0-9]+', str(var))])
     # If no files are found, raise error
     if not files:
         raise ValueError(f"{folder_path} with {glob_filter} filter had no results")
-    # Initialize containers
-    filenames = []
-    datasets = []
-    label_sets = []
-    # Loop through the files
-    for file in files:
-        filenames.append(file.name)
-        # If the labels are in separate files, load them
-        if labels_filename:
-            if "label" in file:
-                label_sets.append(np.loadtxt(file, **kwargs))
-            else:
-                datasets.append(np.loadtxt(file, **kwargs))
-        # Otherwise the labels are in the last column
-        elif labels_last_column:
-            # Load the data
-            data = np.loadtxt(file, **kwargs)
-            # Add the datasets and labels
-            label_sets.append(data[:, -1])
-            datasets.append(data[:, :-1])
-    # Return the datasets and associated labels
+    # Run the custom function if provided
+    if custom_func is not None:
+        filenames, datasets, label_sets = custom_func(files)
+    else:
+        # Initialize containers
+        filenames = []
+        datasets = []
+        label_sets = []
+        # Loop through the files
+        for file in files:
+            filenames.append(file.name)
+            # If the labels are in separate files, load them
+            if labels_filename:
+                if "label" in file:
+                    label_sets.append(np.loadtxt(file, **kwargs))
+                else:
+                    datasets.append(np.loadtxt(file, **kwargs))
+            # Otherwise the labels are in the last column
+            elif labels_last_column:
+                # Load the data
+                data = np.loadtxt(file, **kwargs)
+                # Add the datasets and labels
+                label_sets.append(data[:, -1].astype(int))
+                datasets.append(data[:, :-1])
+    # Return the filenames, datasets, and labels
     return filenames, datasets, label_sets
 
 def load_folder(folder_path):

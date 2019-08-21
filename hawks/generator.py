@@ -280,10 +280,11 @@ class BaseGenerator:
                     category=UserWarning
                 )
         except MemoryError:
+            # Should probably raise the error here
             warnings.warn(
-                    message=f"So many configs are being created that it caused a MemoryError. Did you configure this experiment correctly?",
-                    category=UserWarning
-                )
+                message=f"So many configs are being created that it caused a MemoryError. Did you configure this experiment correctly?",
+                category=UserWarning
+            )
             total_configs = None
         return total_configs, key_paths, param_lists
 
