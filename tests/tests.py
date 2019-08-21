@@ -417,6 +417,23 @@ class HawksTests(unittest.TestCase):
         equals = np.allclose(res.values, known_result.values)
         self.assertTrue(equals)
 
+    def test_full_hawks_run_multiple(self):
+        gen = hawks.create_generator("validation.json")
+        gen.run()
+        # Run a second time to ensure there's no carryover
+        gen = hawks.create_generator("validation.json")
+        gen.run()
+
+        res = gen.get_stats()
+
+        known_result = pd.read_csv(
+            "validation.csv",
+            index_col=False
+        )
+        # Pandas can be iffy with data types
+        equals = np.allclose(res.values, known_result.values)
+        self.assertTrue(equals)
+
     def test_incorrect_config_arg(self):
         with self.assertRaises(ValueError):
             gen = hawks.create_generator(

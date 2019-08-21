@@ -17,9 +17,17 @@ def load_json(fname, subdict=None):
     else:
         return params[subdict]
 
-def get_key_paths(d, key_paths=[], param_lists=[], acc=[]):
+def get_key_paths(d, key_paths=None, param_lists=None, acc=None):
     """Used to traverse a config and identify where multiple parameters are given
     """
+    # Avoid mutable default argument issue for first call
+    if key_paths is None:
+        key_paths = []
+    if param_lists is None:
+        param_lists = []
+    if acc is None:
+        acc = []
+    # Loop over the items
     for k, v in d.items():
         if isinstance(v, dict):
             get_key_paths(v, key_paths, param_lists, acc=acc + [k])
