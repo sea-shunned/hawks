@@ -2,3 +2,6 @@ experiments/
 __pycache__/
 *.code-workspace
 to-do.md
+build/
+dist/
+*.egg-info
