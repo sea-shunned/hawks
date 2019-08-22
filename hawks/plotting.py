@@ -1,4 +1,5 @@
 from pathlib import Path
+from itertools import cycle
 from copy import deepcopy
 
 import numpy as np
@@ -6,9 +7,11 @@ import matplotlib
 from matplotlib.patches import Ellipse
 from scipy.stats import norm, chi2
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 # plt.switch_backend('agg')
 import matplotlib.cm as cm
+import seaborn as sns
 
 plt.style.use('seaborn-paper')
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -16,6 +19,8 @@ matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['xtick.labelsize'] = 10
 matplotlib.rcParams['ytick.labelsize'] = 10
 matplotlib.rcParams['axes.labelsize'] = 12
+
+sns.set_style("whitegrid")
 
 def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="rainbow", fig_format="png", global_seed=None, save=False, show=True, remove_axis=False, fig_title=None):
     # If no guidance is given, set it close to a square
@@ -63,7 +68,7 @@ def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="rainbow", fig_for
     # Close the figure (and its window)
     plt.close(fig)
 
-def plot_indiv(indiv, ax=None, multiple=False, save=False, fpath=None, cmap="rainbow", fig_format="png", global_seed=None, remove_axis=False):
+def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None, cmap="rainbow", fig_format="png", global_seed=None, remove_axis=False):
     if multiple and ax is None:
         raise ValueError(f"An axis object must be supplied if plotting multiple indivs")
     # Create the figure and axis if called in isolation
@@ -100,8 +105,10 @@ def plot_indiv(indiv, ax=None, multiple=False, save=False, fpath=None, cmap="rai
         # Save plot (or not)
         if save:
             save_plot(fig, fpath, fig_format)
-        else:
+        if show:
             plt.show()
+        # Close the figure (and its window)
+        plt.close(fig)
 
 def plot_cluster(ax, cluster, color, add_patch=True, add_data=True, patch_color=None, hatch=None, pca=None):
     # Add the patch to show the area of the Gaussian
@@ -190,3 +197,54 @@ def save_plot(fig, fpath, fig_format):
             bbox_inches='tight',
             figsize=(15, 10)
         )
+
+def instance_space(df, color_highlight, marker_highlight, show=True, save_folder=None, filename="instance_space", cmap="inferno", **kwargs):
+    # import pdb; pdb.set_trace()
+    # Make the fig, ax
+    fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
+    # Setup the colours
+    # # Get the colormap and apply
+    # cmap = cm.get_cmap(cmap)
+    # num_unique = len(np.unique(df[highlight].values))
+    # colors = cmap(np.linspace(0, 1, num_unique))
+    # Set the markers
+    markers = cycle(["o", "D", "X", "v", "P", "s", "*", "^"])
+    # Set the colours by unique items in the highlight
+    # Select the problem feature columns/values
+    feature_cols = [col for col in df if col.startswith("f_")]
+    prob_feat_vals = df[feature_cols].values
+    # PCA the problem features
+    pca = PCA(n_components=2)
+    pca_feat_vals = pca.fit_transform(
+        StandardScaler().fit_transform(prob_feat_vals)
+    )
+    # print(f"PCA shape: {pca_feat_vals.shape}")
+    df["PC1"] = pca_feat_vals[:, 0]
+    df["PC2"] = pca_feat_vals[:, 1]
+    # Use seaborn's scatterplot for ease (otherwise groupby)
+    ax = sns.scatterplot(
+        x="PC1",
+        y="PC2",
+        data=df,
+        hue=color_highlight,
+        style=marker_highlight,
+        palette=cmap,
+        ax=ax,
+        legend="full",
+        markers=markers,
+        edgecolor="none", # Remove seaborn's white border
+        s=15,
+        **kwargs
+    )
+    # Construct filename using what has been varied
+    if marker_highlight == color_highlight:
+        fname = f"{filename}_{marker_highlight}"
+    else:
+        fname = f"{filename}_{marker_highlight}-{color_highlight}"
+    if save_folder is not None:
+        fpath = Path(save_folder) / fname
+        save_plot(fig, fpath, fig_format="pdf")
+    if show:
+        plt.show()
+    # Close the figure (and its window)
+    plt.close(fig)
