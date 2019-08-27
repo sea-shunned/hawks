@@ -1,9 +1,9 @@
 import unittest
 import sys
-sys.path.append('..')
 import numpy as np
 from sklearn.metrics import silhouette_score
 import pandas as pd
+sys.path.append('..')
 import hawks
 from hawks.cluster import Cluster
 from hawks.dataset import Dataset
@@ -142,11 +142,7 @@ class GenotypeTests(unittest.TestCase):
             self.indiv1,
             self.indiv2,
             cxpb=1
-        )
-        self.indiv1[0].num_seed = self.indiv2[0].num_seed
-        self.indiv1[1].num_seed = self.indiv2[1].num_seed
-        self.indiv1[0].rotation = self.indiv2[0].rotation
-        self.indiv1[1].rotation = self.indiv2[1].rotation        
+        )   
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -252,12 +248,29 @@ class ConstraintTests(unittest.TestCase):
 
 class EvolutionaryTests(unittest.TestCase):
     # **TODO** Some tests for different selection methods
-    pass
+
+    def setUp(self):
+        self.gen = hawks.create_generator("validation.json")
+        self.init_pop = []
+        for indiv in self.gen.create_individual():
+            self.init_pop.append(indiv)
+
+    def tearDown(self):
+        del self.gen
+
+    def test_overlap_consistent(self):
+        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"])
+
+        overlaps_before = np.sum([indiv.constraints["overlap"] for indiv in pop])
+        for indiv in pop:
+            indiv.calc_constraints(self.gen.full_config["constraints"])
+        overlaps_after = np.sum([indiv.constraints["overlap"] for indiv in pop])
+        self.assertAlmostEqual(overlaps_before, overlaps_after)
 
 class DatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Create some baseline args so we can just modify the relevant ones
+        # Create some baseline args so we can just modify the relevant onesdef tearDown(self):self):
         cls.args = {
             "num_examples": 1000,
             "num_clusters": 10,
