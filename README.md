@@ -1,6 +1,6 @@
 # HAWKS Data Generator
 
-![HAWKS Animation](examples/hawks_anim.gif)
+![HAWKS Animation](examples/hawks_animation.gif)
 
 HAWKS is a tool for generating controllably difficult synthetic data, used primarily for clustering. This repo is associated with the following paper:
 
