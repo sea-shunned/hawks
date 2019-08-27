@@ -132,13 +132,13 @@ def plot_cluster(ax, cluster, color, add_patch=True, add_data=True, patch_color=
     if add_data:
         ax.scatter(
             cluster.values[:, 0], cluster.values[:, 1],
-            alpha=0.9, s=20, c=color
+            alpha=0.9, s=20, c=[color]
         )
     else:
         # We need the data to be there, just make it invisible
         ax.scatter(
             cluster.values[:, 0], cluster.values[:, 1],
-            alpha=0, s=20, c=color
+            alpha=0, s=20, c=[color]
         )
     return ax
 
@@ -198,15 +198,10 @@ def save_plot(fig, fpath, fig_format):
             figsize=(15, 10)
         )
 
-def instance_space(df, color_highlight, marker_highlight, show=True, save_folder=None, filename="instance_space", cmap="inferno", **kwargs):
-    # import pdb; pdb.set_trace()
-    # Make the fig, ax
+def instance_space(df, color_highlight, marker_highlight=None, show=True, save_folder=None, seed=None, filename="instance_space", cmap="inferno", **kwargs):
+    # Make the fig and ax
+    # Pop the figsize if provided, otherwise use default (None)
     fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
-    # Setup the colours
-    # # Get the colormap and apply
-    # cmap = cm.get_cmap(cmap)
-    # num_unique = len(np.unique(df[highlight].values))
-    # colors = cmap(np.linspace(0, 1, num_unique))
     # Set the markers
     markers = cycle(["o", "D", "X", "v", "P", "s", "*", "^"])
     # Set the colours by unique items in the highlight
@@ -214,13 +209,35 @@ def instance_space(df, color_highlight, marker_highlight, show=True, save_folder
     feature_cols = [col for col in df if col.startswith("f_")]
     prob_feat_vals = df[feature_cols].values
     # PCA the problem features
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=2, random_state=seed)
     pca_feat_vals = pca.fit_transform(
         StandardScaler().fit_transform(prob_feat_vals)
     )
-    # print(f"PCA shape: {pca_feat_vals.shape}")
+    # Add the PCs to the df
     df["PC1"] = pca_feat_vals[:, 0]
     df["PC2"] = pca_feat_vals[:, 1]
+    # Convert column names
+    if color_highlight.lower() == "generator":
+        color_highlight = "source"
+    elif color_highlight.lower() == "algorithm":
+        color_highlight = "Algorithm"
+    if marker_highlight is not None and marker_highlight.lower() == "generator":
+        marker_highlight = "source"
+    elif marker_highlight is not None and marker_highlight.lower() == "algorithm":
+        marker_highlight = "Algorithm"
+    # Make the conversions needed for plotting clustering algorithms
+    if color_highlight == "Algorithm" or marker_highlight == "Algorithm":
+        # Reshape the df to put cluster algs into single column
+        df = df.melt(
+            id_vars=[col for col in df if not col.startswith("c_")],
+            value_vars=[col for col in df if col.startswith("c_")],
+            var_name="Algorithm",
+            value_name="ARI"
+        )
+        # Remove the c_ prefix to algorithm names
+        df['Algorithm'] = df['Algorithm'].map(lambda x: str(x)[2:])
+        # Then we need to take the best algorithm for each dataset
+        df = df.loc[df.groupby(["source", "dataset_num"])["ARI"].idxmax()].reset_index(drop=True)
     # Use seaborn's scatterplot for ease (otherwise groupby)
     ax = sns.scatterplot(
         x="PC1",
@@ -230,20 +247,22 @@ def instance_space(df, color_highlight, marker_highlight, show=True, save_folder
         style=marker_highlight,
         palette=cmap,
         ax=ax,
-        legend="full",
+        legend="full", # Some scenarios may need brief instead
         markers=markers,
         edgecolor="none", # Remove seaborn's white border
-        s=15,
+        s=20,
         **kwargs
     )
-    # Construct filename using what has been varied
-    if marker_highlight == color_highlight:
-        fname = f"{filename}_{marker_highlight}"
-    else:
-        fname = f"{filename}_{marker_highlight}-{color_highlight}"
+    # Save if a location is given
     if save_folder is not None:
+        # Construct filename using what has been varied
+        if marker_highlight == color_highlight:
+            fname = f"{filename}_{marker_highlight}"
+        else:
+            fname = f"{filename}_{marker_highlight}-{color_highlight}"
         fpath = Path(save_folder) / fname
         save_plot(fig, fpath, fig_format="pdf")
+    # Show the graph
     if show:
         plt.show()
     # Close the figure (and its window)
