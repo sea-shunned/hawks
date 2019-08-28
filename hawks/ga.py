@@ -24,7 +24,6 @@ def deap_setup(objective_dict, dataset_obj, ga_params):
         weights.append(objective['class'].weight)
     # DEAP expects a tuple
     weights = tuple(weights)
-    ga_params["weights"] = weights
     # Create the DEAP fitness class
     creator.create("Fitness", base.Fitness, weights=weights)  
     # Inherit from Genotype to get the methods
@@ -151,6 +150,7 @@ def initialize_ga(toolbox, ga_params, objective_dict, constraint_params):
     # Calculate the constraints
     for indiv in pop:
         indiv.calc_constraints(constraint_params)
+        reset_changed_flags(indiv)
     return pop
 
 def evaluate_indiv(indiv, objective_dict):
@@ -161,10 +161,12 @@ def evaluate_indiv(indiv, objective_dict):
         res = objective['class'].eval_objective(indiv)#, **objective['args'])
         # Append the result
         obj_values.append(res)
-    # Set all flags to false to track changes
+    return tuple(obj_values)
+
+def reset_changed_flags(indiv):
+    # Set all flags to false to enable future partial recomp
     for cluster in indiv:
         cluster.changed = False
-    return tuple(obj_values)
 
 def parental_selection(pop, offspring_size):    
     parents = []
@@ -179,16 +181,14 @@ def parental_selection(pop, offspring_size):
         parents.append(
             (pop[index1], pop[index2])
         )
+    # Duplicate if we have a pop size of 1
+    if not parents:
+        parents = [(pop[0], pop[0])]
     return parents
 
 def stochastic_ranking(pop, ga_params):
     # Avoid lookups for things in loop
     prob_fitness = ga_params["prob_fitness"]
-    # Select whether we want smaller or larger fitness
-    if ga_params["weights"][0] < 0:
-        op = operator.gt
-    else:
-        op = operator.lt
     # Loop over each individual
     for _ in range(len(pop)):
         # Counter for break criteria
@@ -199,8 +199,9 @@ def stochastic_ranking(pop, ga_params):
             u = Genotype.global_rng.rand()
             # Test if they're both feasible or if we eval based on objective
             if (pop[j].penalty == 0 and pop[j+1].penalty == 0) or (u < prob_fitness):
+                # import pdb; pdb.set_trace()
                 # Compare fitness of the two indivs
-                if op(pop[j].fitness.values, pop[j+1].fitness.values):
+                if pop[j].fitness.wvalues < pop[j+1].fitness.wvalues:
                     # Swap the individuals
                     pop[j], pop[j+1] = pop[j+1], pop[j]
                     # Add to swap counter
@@ -248,13 +249,15 @@ def generation(pop, toolbox, constraint_params):
     # Resample the values
     for indiv in offspring:
         indiv.resample_values()
-    # Calculate the constraints
-    for indiv in offspring:
-        indiv.recalc_constraints(constraint_params)
     # Evaluate the offspring
     fitnesses = [toolbox.evaluate(indiv) for indiv in offspring]
     for ind, fit in zip(offspring, fitnesses):
         ind.fitness.values = fit
+    # Calculate the constraints (for changed clusters only)
+    for indiv in offspring:
+        indiv.recalc_constraints(constraint_params)
+        # Reset every .changed flag to False
+        reset_changed_flags(indiv)
     # Select from the current population and new offspring
     pop = toolbox.environment_selection(pop+offspring)
     return pop

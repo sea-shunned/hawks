@@ -1,9 +1,9 @@
 import unittest
 import sys
-sys.path.append('..')
 import numpy as np
 from sklearn.metrics import silhouette_score
 import pandas as pd
+sys.path.append('..')
 import hawks
 from hawks.cluster import Cluster
 from hawks.dataset import Dataset
@@ -142,11 +142,7 @@ class GenotypeTests(unittest.TestCase):
             self.indiv1,
             self.indiv2,
             cxpb=1
-        )
-        self.indiv1[0].num_seed = self.indiv2[0].num_seed
-        self.indiv1[1].num_seed = self.indiv2[1].num_seed
-        self.indiv1[0].rotation = self.indiv2[0].rotation
-        self.indiv1[1].rotation = self.indiv2[1].rotation        
+        )   
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -252,18 +248,35 @@ class ConstraintTests(unittest.TestCase):
 
 class EvolutionaryTests(unittest.TestCase):
     # **TODO** Some tests for different selection methods
-    pass
+
+    def setUp(self):
+        self.gen = hawks.create_generator("validation.json")
+        self.init_pop = []
+        for indiv in self.gen.create_individual():
+            self.init_pop.append(indiv)
+
+    def tearDown(self):
+        del self.gen
+
+    def test_overlap_consistent(self):
+        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"])
+
+        overlaps_before = np.sum([indiv.constraints["overlap"] for indiv in pop])
+        for indiv in pop:
+            indiv.calc_constraints(self.gen.full_config["constraints"])
+        overlaps_after = np.sum([indiv.constraints["overlap"] for indiv in pop])
+        self.assertAlmostEqual(overlaps_before, overlaps_after)
 
 class DatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Create some baseline args so we can just modify the relevant ones
+        # Create some baseline args so we can just modify the relevant onesdef tearDown(self):self):
         cls.args = {
             "num_examples": 1000,
             "num_clusters": 10,
             "num_dims": 2,
             "equal_clusters": False,
-            "min_clust_size": 0.01
+            "min_clust_size": 5
         }
 
         Dataset.global_rng = np.random.RandomState(42)
@@ -310,6 +323,23 @@ class DatasetTests(unittest.TestCase):
         # There is a chance of a clash, but ensure not all are the same
         self.assertTrue(len(unique_sizes) > 1)
 
+    def test_incorrect_min_clust_size(self):
+        kwargs = self.args.copy()
+        kwargs["num_examples"] = 100
+        kwargs["num_clusters"] = 10
+        kwargs["min_clust_size"] = 20 # Not possible, will be modified
+        obj = Dataset(**kwargs)
+
+        self.assertLessEqual(obj.min_clust_size, obj.num_examples/obj.num_clusters)
+    
+    def test_exact_min_clust_size(self):
+        kwargs = self.args.copy()
+        kwargs["num_examples"] = 200
+        kwargs["num_clusters"] = 5
+        kwargs["min_clust_size"] = 40 # Not possible, will be modified
+        obj = Dataset(**kwargs)
+
+        self.assertEqual(obj.cluster_sizes, [40]*5)
     # **TODO** add a test for size tuple method if we add it
 
 class ObjectiveTests(unittest.TestCase):
@@ -346,7 +376,7 @@ class ObjectiveTests(unittest.TestCase):
         for cluster in self.indiv:
             cluster.changed = False
         
-        self.indiv[0].gen_mean()
+        self.indiv[0].gen_initial_mean()
         self.indiv[0].changed = True
         aux = self.indiv.silhouette
         
@@ -413,9 +443,65 @@ class HawksTests(unittest.TestCase):
             "validation.csv",
             index_col=False
         )
+        print(res)
+        print(known_result)
         # Pandas can be iffy with data types
         equals = np.allclose(res.values, known_result.values)
         self.assertTrue(equals)
+
+    def test_full_hawks_run_multiple(self):
+        gen = hawks.create_generator("validation.json")
+        gen.run()
+        # Run a second time to ensure there's no carryover
+        gen = hawks.create_generator("validation.json")
+        gen.run()
+
+        res = gen.get_stats()
+
+        known_result = pd.read_csv(
+            "validation.csv",
+            index_col=False
+        )
+        # Pandas can be iffy with data types
+        equals = np.allclose(res.values, known_result.values)
+        self.assertTrue(equals)
+
+    def test_incorrect_config_arg(self):
+        with self.assertRaises(ValueError):
+            gen = hawks.create_generator(
+                {
+                    "hawks": {
+                        "seed_num": 4,
+                        "num_runs": 1
+                    },
+                    "objectives": {
+                        "silhouette": {
+                            "target": 0.9
+                        }
+                    },
+                    "constraints": {
+                        "eigenval_ratio": {
+                            "lim": "upper" # <--- error
+                        }
+                    }
+                }
+            )
+
+    def test_nested_config_arg(self):
+        gen = hawks.create_generator(
+            {
+                "constraints": {
+                    "overlap": {
+                        "limit": "TEST"
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(
+            gen.full_config["constraints"]["overlap"]["limit"],
+            "TEST"
+        )
 
 if __name__ == '__main__':
     unittest.main(buffer=True)

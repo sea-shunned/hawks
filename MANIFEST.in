@@ -1,2 +1,3 @@
 include user_guide.md
+include changelog.md
 include hawks/defaults.json

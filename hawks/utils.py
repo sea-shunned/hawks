@@ -2,6 +2,8 @@
 Functions to help with error handling and generally support everything else. Could be integrated into the Generator, but sometimes can be used outside that.
 """
 import json
+from datetime import datetime
+from pathlib import Path
 from functools import reduce
 
 def load_json(fname, subdict=None):
@@ -15,9 +17,17 @@ def load_json(fname, subdict=None):
     else:
         return params[subdict]
 
-def get_key_paths(d, key_paths=[], param_lists=[], acc=[]):
+def get_key_paths(d, key_paths=None, param_lists=None, acc=None):
     """Used to traverse a config and identify where multiple parameters are given
     """
+    # Avoid mutable default argument issue for first call
+    if key_paths is None:
+        key_paths = []
+    if param_lists is None:
+        param_lists = []
+    if acc is None:
+        acc = []
+    # Loop over the items
     for k, v in d.items():
         if isinstance(v, dict):
             get_key_paths(v, key_paths, param_lists, acc=acc + [k])
@@ -31,3 +41,26 @@ def set_key_path(d, key_path, v):
     """
     d1 = reduce(dict.get, key_path[:-1], d)
     d1[key_path[-1]] = v
+
+def df_to_csv(df, path, filename):
+    # Check that the folder provided is a path
+    if isinstance(path, Path):
+        # Make the directory if needed
+        path.mkdir(parents=True, exist_ok=True)
+    else:
+        # Make it a path
+        path = Path(path)
+        # Make it a directory if it's not
+        if not path.is_dir():
+            path.mkdir(parents=True)
+    # Save to csv via pandas
+    df.to_csv(
+        path / f"{filename}.csv",
+        sep=",",
+        index=False
+    )
+
+def get_date():
+    """Used to get get and format current date, to name folders when no name is given
+    """
+    return datetime.today().strftime('%Y_%m_%d-%H%M%S')
