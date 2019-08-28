@@ -124,6 +124,7 @@ class Silhouette(ClusterIndex):
             for cluster in indiv:
                 if cluster.changed:
                     break
+            # Nothing has changed
             else:
                 # Handle the first time it's evaluated
                 if indiv.silhouette is None:
@@ -135,15 +136,17 @@ class Silhouette(ClusterIndex):
                     silh_width = indiv.silhouette
                 # Return the difference between the objective target and the true SW
                 return np.abs(Silhouette.target - silh_width)
-            # Update the distances
-            indiv.distances = Silhouette.calc_distances(indiv.all_values)
             # Container to only update the clusters that have changes
             clust_list = []
             for i, cluster in enumerate(indiv):
                 if cluster.changed:
                     clust_list.append(i)
             # Update the distance matrix
-            Silhouette.recompute_dists(indiv, clust_list)
+            if len(clust_list) < len(indiv):
+                Silhouette.recompute_dists(indiv, clust_list)
+            # Do the full array calc if all clusters have changed
+            else:
+                indiv.distances = Silhouette.calc_distances(indiv.all_values)
             # Calculate the new a(i) values
             Silhouette.calc_intraclusts(indiv, clust_list)
             # Calculate the new b(i) values
