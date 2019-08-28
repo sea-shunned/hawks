@@ -49,7 +49,6 @@ class Dataset:
             'num_clusters':     self.num_clusters,
             'cluster_sizes':    self.cluster_sizes
         }
-        # print(f"Dataset instance params: {self.__dict__}")
 
     def gen_cluster_sizes(self, method="auto"):
         # Select method based on inputs provided
@@ -72,15 +71,15 @@ class Dataset:
         # https://stackoverflow.com/questions/29187044/generate-n-random-numbers-within-a-range-with-a-constant-sum
         weights = [-np.log(self.global_rng.rand()) for _ in range(self.num_clusters)]
         sum_val = np.sum(weights)
-
+        # Scale the weights to sum to 1
         weights = [i/sum_val for i in weights]
-
+        # Create cluster sizes (possibly a bit long...)
         self.cluster_sizes = [
-            int(np.around(self.min_clust_size + i*(self.num_examples-(self.num_clusters*self.min_clust_size)))) for i in weights]
+            int(np.around(self.min_clust_size + i*(self.num_examples-(self.num_clusters*self.min_clust_size)))) for i in weights
+        ]
 
     def _equal_clust_sizes(self):
+        # Generate equal sizes that roughly sum to target
         clust_size = int(np.around(self.num_examples/self.num_clusters))
-
-        print(f"Generating {self.num_clusters} clusters each of size {clust_size}")
-
+        # Create the list of cluster sizes
         self.cluster_sizes = [clust_size] * self.num_clusters

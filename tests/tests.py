@@ -276,7 +276,7 @@ class DatasetTests(unittest.TestCase):
             "num_clusters": 10,
             "num_dims": 2,
             "equal_clusters": False,
-            "min_clust_size": 0.01
+            "min_clust_size": 5
         }
 
         Dataset.global_rng = np.random.RandomState(42)
@@ -323,6 +323,23 @@ class DatasetTests(unittest.TestCase):
         # There is a chance of a clash, but ensure not all are the same
         self.assertTrue(len(unique_sizes) > 1)
 
+    def test_incorrect_min_clust_size(self):
+        kwargs = self.args.copy()
+        kwargs["num_examples"] = 100
+        kwargs["num_clusters"] = 10
+        kwargs["min_clust_size"] = 20 # Not possible, will be modified
+        obj = Dataset(**kwargs)
+
+        self.assertLessEqual(obj.min_clust_size, obj.num_examples/obj.num_clusters)
+    
+    def test_exact_min_clust_size(self):
+        kwargs = self.args.copy()
+        kwargs["num_examples"] = 200
+        kwargs["num_clusters"] = 5
+        kwargs["min_clust_size"] = 40 # Not possible, will be modified
+        obj = Dataset(**kwargs)
+
+        self.assertEqual(obj.cluster_sizes, [40]*5)
     # **TODO** add a test for size tuple method if we add it
 
 class ObjectiveTests(unittest.TestCase):
@@ -426,6 +443,8 @@ class HawksTests(unittest.TestCase):
             "validation.csv",
             index_col=False
         )
+        print(res)
+        print(known_result)
         # Pandas can be iffy with data types
         equals = np.allclose(res.values, known_result.values)
         self.assertTrue(equals)
