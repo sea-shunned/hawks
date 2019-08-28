@@ -3,7 +3,7 @@ from setuptools import setup
 if __name__ == '__main__':
     setup(
         name='hawks',
-        version='0.0.2',
+        version='0.1.0',
         author='Cameron Shand',
         author_email='cameron.shand@manchester.ac.uk',
         packages=['hawks'],
@@ -16,12 +16,13 @@ if __name__ == '__main__':
         python_requires='>=3.6',
         install_requires=[
             "deap == 1.2.2",
-            "matplotlib >= 2.1",
+            "matplotlib >= 3.0",
             "numpy >= 1.15",
             "pandas >= 0.23",
             "scikit-learn >= 0.20",
             "scipy >= 1.1",
-            "tqdm >= 4.15"
+            "seaborn >= 0.9.0",
+            "tqdm >= 4.15",
         ],
         classifiers=[
             "License :: OSI Approved :: MIT License",
