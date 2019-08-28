@@ -198,6 +198,30 @@ def save_plot(fig, fpath, fig_format):
             figsize=(15, 10)
         )
 
+def create_boxplot(df, x, y, cmap="viridis", xlabel=None, ylabel=None, fpath=None, show=False, fig_format="pdf", **kwargs):
+    # Create the fig and ax objects
+    fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
+    # Create the boxplot using seaborn
+    ax = sns.boxplot(
+        x=x,
+        y=y,
+        data=df,
+        palette=cmap,
+        ax=ax,
+        **kwargs
+    )
+    # Set labels if given
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    # Save the graph if specified
+    if fpath is not None:
+        save_plot(fig, fpath, fig_format)
+    # Show the graph if specified
+    if show:
+        plt.show()
+
 def instance_space(df, color_highlight, marker_highlight=None, show=True, save_folder=None, seed=None, filename="instance_space", cmap="inferno", **kwargs):
     # Make the fig and ax
     # Pop the figsize if provided, otherwise use default (None)
