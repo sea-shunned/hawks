@@ -112,8 +112,6 @@ def select_crossover(toolbox, ga_params):
         mate_func = Genotype.xover_cluster
     elif ga_params["mate_scheme"] == "dv":
         mate_func = Genotype.xover_genes
-    elif ga_params["mate_scheme"] == "dv_new":
-        mate_func = Genotype.xover_genes_new
     else:
         raise ValueError(f'{ga_params["mate_scheme"]} is not a valid mutation scheme')
     # Register crossover
