@@ -89,14 +89,11 @@ An important part of this work is the visualization of the datasets according to
 
 As seen in `examples/instance_example.py`, this is designed to work with both `hawks` and datasets from external sources. Just modify the `source` parameter, and pass whatever arguments are needed for `np.loadtxt` to load the dataset, or give a custom function that extracts the data and associated labels.
 
-In `hawks/plotting.py`, the `instance_space()` function allows for the easy plotting of the instance space generated from `analyse_datasets()`. The instance space from the example is shown below:
-![Instance Space](examples/instance_space_source.pdf)
+In `hawks/plotting.py`, the `instance_space()` function allows for the easy plotting of the instance space generated from `analyse_datasets()`. The instance space from the example is shown [here](https://github.com/sea-shunned/hawks/blob/master/examples/instance_space_source.pdf).
 
 As a single set of values for the silhouette width and constraints were used for HAWKS, the diversity is a lot less than that produced from the `sklearn` functions, hence the difference.
 
 ### Cluster Analysis
 By running `analyse_datasets(clustering=True)` we can run a series of clustering algorithms (defined in `hawks/analysis.py`) on the provided datasets.
 
-In `examples/clustering_example.py` we can see multiple sets of datasets being run with the different clustering algorithms. We can then plot the clustering performance (Adjusted Rand Index) for the different sets of datasets, shown below.
-
-![Clustering Performance](examples/clustering_performance.pdf)
+In `examples/clustering_example.py` we can see multiple sets of datasets being run with the different clustering algorithms. We can then plot the clustering performance (Adjusted Rand Index) for the different sets of datasets, shown [here](https://github.com/sea-shunned/hawks/blob/master/examples/clustering_performance.pdf).
