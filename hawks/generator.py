@@ -8,6 +8,8 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from copy import deepcopy
+import shutil
+import subprocess
 import json
 import warnings
 
@@ -184,15 +186,14 @@ class BaseGenerator:
         default_config = utils.load_json(Path(__file__).parent / "defaults.json")
         return default_config
 
-    def save_config(self, config, folder=None, filename=None):
-        # Make sure that the config is complete
-        # Ensure this works as expected (filling in any gaps)
-        # Unlikely that this is needed as this method should be called after a run
-        config, _ = BaseGenerator.process_config(config)
+    def save_config(self, config=None, folder=None, filename=None):
         # Determine location of the config
         # If no folder is given, default to the configs folder
         if folder is None:
-            folder = Path.cwd()
+            if self.base_folder is None:
+                folder = Path.cwd()
+            else:
+                folder = self.base_folder
         # Otherwise put it where specified
         # Some trust is in the user here
         else:
@@ -204,6 +205,9 @@ class BaseGenerator:
         # Use the filename if given
         else:
             fpath = folder / f"{filename}.json"
+        # If not config is given, save the full one
+        if config is None:
+            config = self.full_config
         # Save the config
         with open(fpath, "w") as f:
             json.dump(config, f, indent=4)
@@ -351,7 +355,7 @@ class BaseGenerator:
                     filename = f"config-{config_id}_best-indivs"
                 # Concatenate whole path
                 fpath = plot_folder / filename
-            else: 
+            else:
                 fpath = None
             # Plot the indivs for this config
             plotting.plot_pop(
@@ -366,7 +370,7 @@ class BaseGenerator:
                 global_seed=self.seed_num,
                 remove_axis=remove_axis,
                 fig_title=fig_title
-            )            
+            )
 
     def create_individual(self):
         """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
@@ -526,7 +530,7 @@ class SingleObjective(BaseGenerator):
 
         Note that these lists are flattened. In the single config case, the list of datasets will be `num_runs` long. In the multi_config case, a list of length `num_runs`*`len(self.config_list)` will be returned.
 
-        If the datasets or label_sets have not already been extracted then they are. There is a flag to reset this in case .best_each_run has changed.
+        If the datasets or label_sets have not already been extracted then they are extracted. If this needs to be updated, there is a flag to reset this and extract again.
         """
         # Get the dataset for the best_indiv for each config
         if self.datasets is None or reset:
@@ -602,67 +606,59 @@ class SingleObjective(BaseGenerator):
         if self.multi_config:
             raise ValueError(f"Animation is not implemented for multi-config")
         # Perform initial setup
-        total_configs, key_paths, param_lists = self.setup()
-        # Initialize the config_id
-        config_id = 0
-        # Loop over each config
-        for _, config in tqdm(self._get_configs(key_paths, param_lists), desc="Configs", total=total_configs):
-            # Loop over each run
-            for num_run in tqdm(range(self.num_runs), desc="Runs", leave=False):
-                animate_folder = self.base_folder / "plots" / f"animate_config{config_id}_run{num_run}"
-                animate_folder.mkdir(exist_ok=True, parents=True)
-                # Super special seed selection
-                global_seed = self.increment_seed(num_run)
-                # Create the RandomState instance
-                self.set_global_rng(global_seed)
-                # Create the Dataset instance
-                dataset_obj = prepare.setup_dataset(config["dataset"])
-                # Setup the GA
-                _, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
-                    config["ga"],
-                    config["constraints"],
-                    config["objectives"],
-                    dataset_obj
-                )
-                self.plot_indivs(
+        total_configs, key_paths, param_lists = self._setup()
+        # Setup the plot folder
+        plot_folder = self._plot_save_setup()
+        # Loop over each run
+        for num_run in tqdm(range(self.num_runs), desc="Runs", leave=False):
+            animate_folder = plot_folder / f"animate_run{num_run}"
+            animate_folder.mkdir(exist_ok=True, parents=True)
+            # Super special seed selection
+            global_seed = self.increment_seed(num_run)
+            # Create the RandomState instance
+            self.set_global_rng(global_seed)
+            # Create the Dataset instance
+            dataset_obj = prepare.setup_dataset(self.full_config["dataset"])
+            # Setup the GA
+            _, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+                self.full_config["ga"],
+                self.full_config["constraints"],
+                self.full_config["objectives"],
+                dataset_obj
+            )
+            plotting.plot_pop(
+                pop,
+                fpath=animate_folder / "gen-0",
+                cmap="viridis",
+                fig_format="png",
+                save=True,
+                remove_axis=True,
+                fig_title="Generation 0",
+                show=False
+            )
+            # Go through each generation
+            for gen in tqdm(
+                    range(1, ga_params["num_gens"]),
+                    desc="Generations", leave=False
+                ):
+                pop = ga.generation(
                     pop,
-                    folder=animate_folder,
-                    filename=f"gen-0",
-                    cmap="plasma",
+                    self.deap_toolbox,
+                    self.full_config["constraints"]
+                )
+                plotting.plot_pop(
+                    pop,
+                    fpath=animate_folder / f"gen-{gen}",
+                    cmap="viridis",
                     fig_format="png",
                     save=True,
                     remove_axis=True,
-                    fig_title=f"Gen 0"
+                    fig_title=f"Generation {gen}",
+                    show=False
                 )
-                # Go through each generation
-                for gen in tqdm(
-                        range(1, ga_params["num_gens"]),
-                        desc="Generations", leave=False
-                    ):
-                    pop = ga.generation(
-                        pop,
-                        self.deap_toolbox,
-                        config["constraints"]
-                    )
-                    self.plot_indivs(
-                        pop,
-                        folder=animate_folder,
-                        filename=f"gen-{gen}",
-                        cmap="plasma",
-                        fig_format="png",
-                        save=True,
-                        remove_axis=True,
-                        fig_title=f"Gen {gen}"
-                    )
-
-    def step(self, generations):
-        ### Is this really necessary? ###
-        if self.multi_config:
-            raise ValueError(f"Cannot run step function in multi_config mode")
-        # Perform the initialization of the generator if this is not done
-        # This allows step to be called multiple times, and also for the first time
-        if self.something is None:
-            self.initialize()
-        # Run the specified number of gens
-        for i in range(generations):
-            self._generation()
+                # Keep a reference to the most recent population
+                self.population = pop
+        # Create the gif if convert is available
+        which_convert = shutil.which("convert")
+        if which_convert is not None:
+            subprocess.run("convert -resize 50% -delay 30 -loop 0 `ls -v | grep 'gen-'` hawks_animation.gif", shell=True, check=True, cwd=animate_folder)
