@@ -230,7 +230,6 @@ def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
             ignore_index=True,
             sort=False
         )
-    print("Clustering done")
     return df
 
 def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, source):
@@ -252,7 +251,6 @@ def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, sourc
             ignore_index=True,
             sort=False
         )
-    print("Feature done")
     return df
 
 def determine_num_clusters(col_name, alg_kwargs, labels):
