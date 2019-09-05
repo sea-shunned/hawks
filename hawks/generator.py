@@ -85,6 +85,7 @@ class BaseGenerator:
         self.seed_num = config["hawks"]["seed_num"]
         self.save_best_data = config["hawks"]["save_best_data"]
         self.save_stats = config["hawks"]["save_stats"]
+        self.save_config_flag = config["hawks"]["save_config"]
         # Initialize attributes
         self.population = None # Reference to the final pop
         # self.best_dataset = None # Array of the best dataset
@@ -324,13 +325,52 @@ class BaseGenerator:
         plot_folder.mkdir(exist_ok=True, parents=True)
         return plot_folder
 
-    def plot_best_indivs(self, cmap="rainbow", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
+    def plot_best_indivs(self, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, fig_title=None, nrows=None, ncols=None):
         """Plot the best individuals from each run, for each config.
         
         A separate plot is made for each config, with the best from each run plotted together.
         
         Keyword Arguments:
-            cmap {str} -- The colourmap from matplotlib to use (default: {"rainbow"})
+            cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
+            fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
+            save {bool} -- Save the plot. (default: {None})
+            show {bool} -- Show the plot (default: {True})
+            remove_axis {bool} -- Whether to remove the axis to just show the clusters (default: {False})
+            fig_title {str} -- Figure title (default: {None})
+            nrows {int} -- Number of rows for plt.subplots, calculated if None (default: {None})
+            ncols {int} -- Number of columns for plt.subplots, calculated if None (default: {None})
+        """
+        # Raise error if run premmaturely
+        if self.best_each_run is None:
+            raise ValueError(f"No best individuals are stored - have you run the generator?")
+        # Loop over the configs
+        for config_id, config_set in enumerate(self.best_each_run):
+            # Get the path if saving
+            if save:
+                filename = f"config-{config_id}_best-indivs"
+            # Plot the indivs for this config
+            self.plot_datasets(
+                config_set,
+                nrows=nrows,
+                ncols=ncols,
+                filename=filename,
+                cmap=cmap,
+                fig_format=fig_format,
+                save=save,
+                show=show,
+                global_seed=self.seed_num,
+                remove_axis=remove_axis,
+                fig_title=fig_title
+            )
+
+    def plot_datasets(self, datasets, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
+        """Plot the best individuals from each run, for each config.
+        
+        A separate plot is made for each config, with the best from each run plotted together.
+        
+        Keyword Arguments:
+            cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
+            datasets {BaseGenerator} -- The individuals/datasets to be plotted
             fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
             save {bool} -- Save the plot. (default: {None})
             show {bool} -- Show the plot (default: {True})
@@ -340,37 +380,35 @@ class BaseGenerator:
             nrows {int} -- Number of rows for plt.subplots, calculated if None (default: {None})
             ncols {int} -- Number of columns for plt.subplots, calculated if None (default: {None})
         """
-        # Raise error if run premmaturely
-        if self.best_each_run is None:
-            raise ValueError(f"No best individuals are stored - have you run the generator?")
         # Sort out folders if saving
         if save:
             plot_folder = self._plot_save_setup()
-        # Loop over the configs
-        for config_id, config_set in enumerate(self.best_each_run):
-            # Get the path if saving
-            if save:
-                # Construct filename if not supplied
-                if filename is not None:
-                    filename = f"config-{config_id}_best-indivs"
-                # Concatenate whole path
-                fpath = plot_folder / filename
-            else:
-                fpath = None
-            # Plot the indivs for this config
-            plotting.plot_pop(
-                config_set,
-                nrows=nrows,
-                ncols=ncols,
-                fpath=fpath,
-                cmap=cmap,
-                fig_format=fig_format,
-                save=save,
-                show=show,
-                global_seed=self.seed_num,
-                remove_axis=remove_axis,
-                fig_title=fig_title
-            )
+        # Get the path if saving
+        if save or filename is not None:
+            # Construct filename if not supplied
+            if filename is None:
+                filename = f"datasets_plot"
+            # Assume saving is desired if filename is given
+            if filename is not None:
+                save = True
+            # Concatenate whole path
+            fpath = plot_folder / filename
+        else:
+            fpath = None
+        # Plot the indivs for this config
+        plotting.plot_pop(
+            datasets,
+            nrows=nrows,
+            ncols=ncols,
+            fpath=fpath,
+            cmap=cmap,
+            fig_format=fig_format,
+            save=save,
+            show=show,
+            global_seed=self.seed_num,
+            remove_axis=remove_axis,
+            fig_title=fig_title
+        )
 
     def create_individual(self):
         """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
@@ -404,9 +442,11 @@ class SingleObjective(BaseGenerator):
         if self.any_saving:
             self.create_folders()
             # Save the now completed full config
-            self.save_config(self.full_config, folder=self.base_folder)
+            if self.save_config_flag:
+                self.save_config(self.full_config, folder=self.base_folder)
         # Setup a dataframe for storing stats
-        self.stats = pd.DataFrame()
+        if self.stats is None:
+            self.stats = pd.DataFrame()
         # Get the number of configs for tqdm (and specifics for multi-config)
         if self.multi_config:
             # Count the number of configs to be, and get the changing params
@@ -416,6 +456,9 @@ class SingleObjective(BaseGenerator):
         return total_configs, key_paths, param_lists
 
     def run(self):
+        [_ for _ in self.run_step()]
+
+    def run_step(self):
         total_configs, key_paths, param_lists = self._setup()
         # Initialize the config_id
         config_id = 0
@@ -452,6 +495,8 @@ class SingleObjective(BaseGenerator):
                     config["objectives"],
                     dataset_obj
                 )
+                # for indiv in pop:
+                #     print([clust.num_seed for clust in indiv])
                 # Store results from the initial population
                 results_dict = self._store_results(
                     results_dict, pop, num_run, 0, num_rows, objective_dict
@@ -464,12 +509,16 @@ class SingleObjective(BaseGenerator):
                     pop = ga.generation(
                         pop,
                         self.deap_toolbox,
-                        config["constraints"]
+                        config["constraints"],
+                        cxpb=ga_params["mate_prob"]
                     )
                     # Store results from each generation
                     results_dict = self._store_results(
                         results_dict, pop, num_run, gen, num_rows, objective_dict
                     )
+                    # print("done")
+                    # if gen == 2:
+                    #     raise
                 # Want to now get the best indiv for this particular run
                 # Turn the weighted fitnesses into an array
                 # As single-objective, we extract the only value from tuple
@@ -497,6 +546,8 @@ class SingleObjective(BaseGenerator):
                 )
                 # Keep a reference to the most recent population
                 self.population = pop
+                # YIELDIT
+                yield self
             # Iterate the config_id
             config_id += 1
             # Append the results of this config to the overall results
@@ -601,12 +652,16 @@ class SingleObjective(BaseGenerator):
         else:
             return indiv2
 
-    def animate(self):
+    def animate(self, record_stats=False):
         # Raise error if multi-config specified
         if self.multi_config:
             raise ValueError(f"Animation is not implemented for multi-config")
         # Perform initial setup
         total_configs, key_paths, param_lists = self._setup()
+        # Setup the containers for storing results
+        if record_stats:
+            num_rows = self.full_config["ga"]["num_indivs"]
+            results_dict = defaultdict(list)
         # Setup the plot folder
         plot_folder = self._plot_save_setup()
         # Loop over each run
@@ -620,7 +675,7 @@ class SingleObjective(BaseGenerator):
             # Create the Dataset instance
             dataset_obj = prepare.setup_dataset(self.full_config["dataset"])
             # Setup the GA
-            _, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+            objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
                 self.full_config["ga"],
                 self.full_config["constraints"],
                 self.full_config["objectives"],
@@ -636,6 +691,11 @@ class SingleObjective(BaseGenerator):
                 fig_title="Generation 0",
                 show=False
             )
+            if record_stats:
+                # Store results from the initial population
+                results_dict = self._store_results(
+                    results_dict, pop, num_run, 0, num_rows, objective_dict
+                )
             # Go through each generation
             for gen in tqdm(
                     range(1, ga_params["num_gens"]),
@@ -644,7 +704,8 @@ class SingleObjective(BaseGenerator):
                 pop = ga.generation(
                     pop,
                     self.deap_toolbox,
-                    self.full_config["constraints"]
+                    self.full_config["constraints"],
+                    cxpb=ga_params["mate_prob"]
                 )
                 plotting.plot_pop(
                     pop,
@@ -656,9 +717,23 @@ class SingleObjective(BaseGenerator):
                     fig_title=f"Generation {gen}",
                     show=False
                 )
+                if record_stats:
+                    # Store results from each generation
+                    results_dict = self._store_results(
+                        results_dict, pop, num_run, gen, num_rows, objective_dict
+                    )
                 # Keep a reference to the most recent population
                 self.population = pop
+            
+            self.stats = self.stats.append(
+                pd.DataFrame.from_dict(results_dict), ignore_index=True
+            )
         # Create the gif if convert is available
         which_convert = shutil.which("convert")
         if which_convert is not None:
-            subprocess.run("convert -resize 50% -delay 30 -loop 0 `ls -v | grep 'gen-'` hawks_animation.gif", shell=True, check=True, cwd=animate_folder)
+            subprocess.run(
+                "convert -resize 50% -delay 30 -loop 0 `ls -v | grep 'gen-'` hawks_animation.gif",
+                shell=True,
+                check=True,
+                cwd=animate_folder
+            )

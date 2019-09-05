@@ -3,11 +3,11 @@ from itertools import cycle
 from copy import deepcopy
 
 import numpy as np
-import matplotlib
-from matplotlib.patches import Ellipse
 from scipy.stats import norm, chi2
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+import matplotlib
+from matplotlib.patches import Ellipse
 import matplotlib.pyplot as plt
 # plt.switch_backend('agg')
 import matplotlib.cm as cm
@@ -22,7 +22,7 @@ matplotlib.rcParams['axes.labelsize'] = 12
 
 sns.set_style("whitegrid")
 
-def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="rainbow", fig_format="png", global_seed=None, save=False, show=True, remove_axis=False, fig_title=None):
+def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="inferno", fig_format="png", global_seed=None, save=False, show=True, remove_axis=False, fig_title=None):
     # If no guidance is given, set it close to a square
     if nrows is None and ncols is None:
         # Get the square root for how many plots we need
@@ -68,7 +68,7 @@ def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="rainbow", fig_for
     # Close the figure (and its window)
     plt.close(fig)
 
-def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None, cmap="rainbow", fig_format="png", global_seed=None, remove_axis=False):
+def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None, cmap="inferno", fig_format="png", global_seed=None, remove_axis=False):
     if multiple and ax is None:
         raise ValueError(f"An axis object must be supplied if plotting multiple indivs")
     # Create the figure and axis if called in isolation
