@@ -418,9 +418,11 @@ class BaseGenerator:
         # Create the RandomState instance
         self.set_global_rng(self.seed_num)
         # Create the Dataset instance
-        dataset_obj = prepare.setup_dataset(self.full_config["dataset"])
+        dataset_obj = Dataset(**self.full_config["dataset"])
+        # Setup some attributes for the Cluster class
+        Cluster.setup_variables(dataset_obj, self.full_config["ga"])
         # Setup the GA
-        objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+        objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
             self.full_config["ga"],
             self.full_config["constraints"],
             self.full_config["objectives"],
@@ -487,9 +489,11 @@ class SingleObjective(BaseGenerator):
                 # Create the RandomState instance
                 self.set_global_rng(global_seed)
                 # Create the Dataset instance
-                dataset_obj = prepare.setup_dataset(config["dataset"])
+                dataset_obj = Dataset(**config["dataset"])
+                # Setup some attributes for the Cluster class
+                Cluster.setup_variables(dataset_obj, config["ga"])
                 # Setup the GA
-                objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+                objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
                     config["ga"],
                     config["constraints"],
                     config["objectives"],
@@ -503,14 +507,14 @@ class SingleObjective(BaseGenerator):
                 )
                 # Go through each generation
                 for gen in tqdm(
-                        range(1, ga_params["num_gens"]),
+                        range(1, config["ga"]["num_gens"]),
                         desc="Generations", leave=False
                     ):
                     pop = ga.generation(
                         pop,
                         self.deap_toolbox,
                         config["constraints"],
-                        cxpb=ga_params["mate_prob"]
+                        cxpb=config["ga"]["mate_prob"]
                     )
                     # Store results from each generation
                     results_dict = self._store_results(
@@ -673,9 +677,11 @@ class SingleObjective(BaseGenerator):
             # Create the RandomState instance
             self.set_global_rng(global_seed)
             # Create the Dataset instance
-            dataset_obj = prepare.setup_dataset(self.full_config["dataset"])
+            dataset_obj = Dataset(**self.full_config["dataset"])
+            # Setup some attributes for the Cluster class
+            Cluster.setup_variables(dataset_obj, self.full_config["ga"])
             # Setup the GA
-            objective_dict, ga_params, self.deap_toolbox, pop = prepare.setup_ga(
+            objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
                 self.full_config["ga"],
                 self.full_config["constraints"],
                 self.full_config["objectives"],
@@ -698,14 +704,14 @@ class SingleObjective(BaseGenerator):
                 )
             # Go through each generation
             for gen in tqdm(
-                    range(1, ga_params["num_gens"]),
+                    range(1, self.full_config["ga"]["num_gens"]),
                     desc="Generations", leave=False
                 ):
                 pop = ga.generation(
                     pop,
                     self.deap_toolbox,
                     self.full_config["constraints"],
-                    cxpb=ga_params["mate_prob"]
+                    cxpb=self.full_config["ga"]["mate_prob"]
                 )
                 plotting.plot_pop(
                     pop,

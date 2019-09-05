@@ -1,35 +1,22 @@
 """
 A few functions that tie multiple things together to do the setup. Could be integrated into the Generator class in the future.
 """
-
-import numpy as np
-
-from hawks.cluster import Cluster
-from hawks.dataset import Dataset
 from hawks.genotype import Genotype
 import hawks.objectives as objectives
 import hawks.ga as ga
-
-def setup_dataset(dataset_params):
-    # Create the Dataset instance
-    dataset_obj = Dataset(**dataset_params)
-    # Give the Cluster class access to some key values
-    for key, val in dataset_obj.cluster_vars.items():
-        setattr(Cluster, key, val)
-    return dataset_obj
 
 def setup_ga(ga_params, constraint_params, objective_params, dataset_obj):
     # Validate the constraints parameters
     Genotype.validate_constraints(constraint_params)
     # Setup the objective parameters
-    objective_dict, ga_params = _setup_objectives(objective_params, ga_params)
+    objective_dict = _setup_objectives(objective_params)
     # Create the DEAP toolbox and generate the initial population
     toolbox, initial_pop = ga.main_setup(
         objective_dict, dataset_obj, ga_params, constraint_params
     )
-    return objective_dict, ga_params, toolbox, initial_pop
+    return objective_dict, toolbox, initial_pop
 
-def _setup_objectives(objective_params, ga_params):
+def _setup_objectives(objective_params):
     # Get the currently available/implemented objectives
     avail_objectives = {
         cls.__name__.lower():{'class':cls} for cls in objectives.ClusterIndex.__subclasses__()}
@@ -54,4 +41,4 @@ def _setup_objectives(objective_params, ga_params):
         objective_dict[selected_obj]["kwargs"] = obj_args
         # Set the kwargs for the class
         objective_dict[selected_obj]['class'].set_kwargs(obj_args)
-    return objective_dict, ga_params
+    return objective_dict

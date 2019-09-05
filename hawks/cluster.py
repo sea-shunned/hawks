@@ -18,6 +18,9 @@ class Cluster:
     # num_dims = None
     # num_clusters = None
     # cluster_sizes = None
+    # The initialziation upper bounds
+    initial_mean_upper = None
+    initial_cov_upper = None
     def __init__(self, size):
         # The cluster size (num data points)
         self.size = size
@@ -39,6 +42,15 @@ class Cluster:
         self.changed = True
         # Setup the cluster for use
         self.initial_cluster_setup()
+
+    @classmethod
+    def setup_variables(cls, dataset_obj, ga_params):
+        # Give the Cluster class access to some important Dataset values
+        for key, val in dataset_obj.cluster_vars.items():
+            setattr(cls, key, val)
+        # Set the initialization bounds from the GA parameters
+        setattr(cls, "initial_mean_upper", ga_params["initial_mean_upper"])
+        setattr(cls, "initial_cov_upper", ga_params["initial_cov_upper"])
 
     def initial_cluster_setup(self):
         # Set the seed for the cluster
@@ -72,7 +84,7 @@ class Cluster:
         # Try to generate the mean (using a uniform distribution)
         try:
             self.mean = self.global_rng.uniform(
-                0, 1, self.num_dims)
+                0, self.initial_mean_upper, self.num_dims)
         except AttributeError as e:
             raise Exception(f"Num_dims is not set as an attr for Cluster - this should have come from Dataset") from e
 
@@ -81,7 +93,7 @@ class Cluster:
         if method == "eigen":
             self.cov = np.diag(
                 self.global_rng.uniform(
-                    0, (1/2), self.num_dims
+                    0, self.initial_cov_upper, self.num_dims
                 )
             )
 

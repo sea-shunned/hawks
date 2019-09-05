@@ -7,8 +7,7 @@
         "seed_num": null,
         "save_best_data": false,
         "save_stats": false,
-        "plot_best": false,
-        "save_plot": false
+        "save_config": false
     },
     "objectives": {
         "silhouette": {
@@ -39,7 +38,9 @@
         "mate_scheme": "dv",
         "mate_prob": 0.7,
         "prob_fitness": 0.5,
-        "elites": 0.2
+        "elites": 0,
+        "initial_mean_upper": 1.0,
+        "initial_cov_upper": 0.5
     },
     "constraints": {
         "overlap": {
