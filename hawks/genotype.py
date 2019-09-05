@@ -137,8 +137,8 @@ class Genotype(list):
         parent2.all_values[start:stop] = parent2[index].values.copy()
 
     @staticmethod
-    def xover_cluster(parent1, parent2, cxpb):
-        """Crossover (uniform when cxpb=0.5) with one probability test for the mean and covariance together
+    def xover_cluster(parent1, parent2, mixing_ratio=0.5):
+        """Uniform crossover with one probability test for the mean and covariance together
         """        
         # Avoid repeated len calls
         size = len(parent1)
@@ -146,7 +146,7 @@ class Genotype(list):
         for i in range(size):
             # Flag for view change
             change = False
-            if Genotype.global_rng.rand() < cxpb:
+            if Genotype.global_rng.rand() < mixing_ratio:
                 parent1[i], parent2[i] = parent2[i], parent1[i]
                 change = True
             # Link the cluster to its new genotype
@@ -159,10 +159,10 @@ class Genotype(list):
                 # Note that the clusters have changed
                 parent1[i].changed, parent2[i].changed = True, True
         return parent1, parent2
-    
+
     @staticmethod
-    def xover_genes(parent1, parent2, cxpb):
-        """Crossover (uniform when cxpb=0.5) with separate probability tests for the mean and covariance
+    def xover_genes(parent1, parent2, mixing_ratio=0.5):
+        """Uniform crossover with separate probability tests for the mean and covariance
         """
         # Avoid repeated len calls
         size = len(parent1)
@@ -170,11 +170,11 @@ class Genotype(list):
         for i in range(size):
             change = False
             # Test for swapping the mean
-            if Genotype.global_rng.rand() < cxpb:
+            if Genotype.global_rng.rand() < mixing_ratio:
                 parent1[i].mean, parent2[i].mean = parent2[i].mean, parent1[i].mean
                 change = True
             # Test for swapping the covariance
-            if Genotype.global_rng.rand() < cxpb:
+            if Genotype.global_rng.rand() < mixing_ratio:
                 parent1[i].cov, parent2[i].cov = parent2[i].cov, parent1[i].cov
                 # Also swap the rotation matrix (as it's part of the cov)
                 parent1[i].rotation, parent2[i].rotation = parent2[i].rotation, parent1[i].rotation

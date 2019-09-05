@@ -17,6 +17,8 @@ class OperatorTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
         clust1 = Cluster(70)
         clust1.mean = np.array([0, 0])
@@ -37,18 +39,77 @@ class OperatorTests(unittest.TestCase):
         self.indiv2 = Genotype([clust3, clust4])
         self.indiv2.create_views()
         self.indiv2.resample_values()
-    
+
     def tearDown(self):
         Cluster.global_rng = None
         Genotype.global_rng = None
 
         delattr(Cluster, "num_dims")
 
+    def test_uniform_crossover_genes(self):
+        # Get the sequence of the numbers to be generated
+        rng = np.random.RandomState(42)
+        swaps = [True if rng.rand() < 0.5 else False for _ in range(len(self.indiv1)*2)]
+
+        indiv1_means = [i.mean for i in self.indiv1]
+        indiv2_means = [i.mean for i in self.indiv2]
+
+        indiv1_covs = [i.cov for i in self.indiv1]
+        indiv2_covs = [i.cov for i in self.indiv2]
+
+        Genotype.global_rng = np.random.RandomState(42)
+        self.indiv1, self.indiv2 = Genotype.xover_genes(
+            self.indiv1,
+            self.indiv2,
+            mixing_ratio=0.5
+        )
+
+        # Test means
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps[0::2])):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertTrue(np.array_equal(clust1.mean, indiv2_means[i]))
+                    self.assertTrue(np.array_equal(clust2.mean, indiv1_means[i]))
+                else:
+                    self.assertTrue(np.array_equal(clust1.mean, indiv1_means[i]))
+                    self.assertTrue(np.array_equal(clust2.mean, indiv2_means[i]))
+        # Test covs
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps[1::3])):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertTrue(np.array_equal(clust1.cov, indiv2_covs[i]))
+                    self.assertTrue(np.array_equal(clust2.cov, indiv1_covs[i]))
+                else:
+                    self.assertTrue(np.array_equal(clust1.cov, indiv1_covs[i]))
+                    self.assertTrue(np.array_equal(clust2.cov, indiv2_covs[i]))
+
+    def test_uniform_crossover_clusters(self):
+        rng = np.random.RandomState(42)
+        swaps = [True if rng.rand() < 0.5 else False for _ in self.indiv1]
+
+        indiv1_ids = [id(i) for i in self.indiv1]
+        indiv2_ids = [id(i) for i in self.indiv2]
+
+        Genotype.global_rng = np.random.RandomState(42)
+        self.indiv1, self.indiv2 = Genotype.xover_cluster(
+            self.indiv1,
+            self.indiv2
+        )
+        # Test whether cluster objects have been swapped or not
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps)):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertEqual(indiv1_ids[i], id(clust2))
+                    self.assertEqual(indiv2_ids[i], id(clust1))
+                else:
+                    self.assertEqual(indiv1_ids[i], id(clust1))
+                    self.assertEqual(indiv2_ids[i], id(clust2))
+
     def test_uniform_crossover_none(self):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=0
+            mixing_ratio=0.0
         )
 
         indiv1_unchanged = all([
@@ -71,12 +132,12 @@ class OperatorTests(unittest.TestCase):
         ])
 
         self.assertTrue(indiv1_unchanged)
-    
+
     def test_uniform_crossover_all(self):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=1
+            mixing_ratio=1.0
         )
 
         indiv1_allchanged = not any([
@@ -108,6 +169,8 @@ class GenotypeTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
         clust1 = Cluster(50)
         clust1.mean = np.array([0, 0])
@@ -128,7 +191,7 @@ class GenotypeTests(unittest.TestCase):
         self.indiv2 = Genotype([clust3, clust4])
         self.indiv2.create_views()
         self.indiv2.resample_values()
-    
+
     def tearDown(self):
         Cluster.global_rng = None
         Genotype.global_rng = None
@@ -141,8 +204,8 @@ class GenotypeTests(unittest.TestCase):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=1
-        )   
+            mixing_ratio=1.0
+        )
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -157,8 +220,8 @@ class GenotypeTests(unittest.TestCase):
         self.indiv1, self.indiv2 = Genotype.xover_cluster(
             self.indiv1,
             self.indiv2,
-            cxpb=1
-        )    
+            mixing_ratio=1.0
+        )
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -176,6 +239,8 @@ class ConstraintTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
     @classmethod
     def tearDownClass(cls):
@@ -259,7 +324,7 @@ class EvolutionaryTests(unittest.TestCase):
         del self.gen
 
     def test_overlap_consistent(self):
-        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"])
+        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"], cxpb=0.7)
 
         overlaps_before = np.sum([indiv.constraints["overlap"] for indiv in pop])
         for indiv in pop:
@@ -443,8 +508,11 @@ class HawksTests(unittest.TestCase):
             "validation.csv",
             index_col=False
         )
+        print("Result:")
         print(res)
+        print("Known result:")
         print(known_result)
+        print("---")
         # Pandas can be iffy with data types
         equals = np.allclose(res.values, known_result.values)
         self.assertTrue(equals)
@@ -505,4 +573,3 @@ class HawksTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(buffer=True)
-    

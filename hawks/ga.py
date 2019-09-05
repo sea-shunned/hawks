@@ -115,8 +115,7 @@ def select_crossover(toolbox, ga_params):
     else:
         raise ValueError(f'{ga_params["mate_scheme"]} is not a valid mutation scheme')
     # Register crossover
-    toolbox.register(
-        "mate", mate_func, cxpb=ga_params["mate_prob"])
+    toolbox.register("mate", mate_func)
     return toolbox
 
 def generate_indiv(icls, dataset_obj):
@@ -176,7 +175,9 @@ def parental_selection(pop, offspring_size):
     for _ in range(int(offspring_size/2)):
         # Take the minimum as the pop is sorted in ranking order
         index1 = np.min(Genotype.global_rng.randint(length, size=2))
-        index2 = np.min(Genotype.global_rng.randint(length, size=2))
+        index2 = index1
+        while index2 == index1:
+            index2 = np.min(Genotype.global_rng.randint(length, size=2))
         # Add this pair to the parent list
         parents.append(
             (pop[index1], pop[index2])
@@ -217,19 +218,24 @@ def stochastic_ranking(pop, ga_params):
             break
     # Calculate how many of the best inidividuals to keep
     num_elites = int(ga_params["num_indivs"] * ga_params["elites"])
-    # Return the appropriate number of individuals
-    if len(pop) > num_elites:
-        # Select the elites, then select the rest randomly from the remainder
-        pop = pop[:num_elites] + [
-            pop[num_elites:][i] for i in Genotype.global_rng.choice(
-                len(pop[num_elites:]),
-                size=ga_params["num_indivs"] - num_elites,
-                replace=False
-                )
-            ]
+    # If no elitism, take the first lambda ranked individuals
+    if num_elites == 0:
+        pop = pop[:ga_params["num_indivs"]]
+    # Otherwise use the elitism
+    else:
+        # Return the appropriate number of individuals
+        if len(pop) > num_elites:
+            # Select the elites, then select the rest randomly from the remainder
+            pop = pop[:num_elites] + [
+                pop[num_elites:][i] for i in Genotype.global_rng.choice(
+                    len(pop[num_elites:]),
+                    size=ga_params["num_indivs"] - num_elites,
+                    replace=False
+                    )
+                ]
     return pop
 
-def generation(pop, toolbox, constraint_params):
+def generation(pop, toolbox, constraint_params, cxpb):
     # Clone population for offspring
     offspring = [toolbox.clone(ind) for ind in pop]
     # Reconstruct the array views lost by cloning
@@ -239,8 +245,9 @@ def generation(pop, toolbox, constraint_params):
     offspring = toolbox.parent_selection(offspring)
     # Create offspring - this happens in place so the parents actually become the children (hence the cloning)
     for parent1, parent2 in offspring:
-        # Crossover
-        toolbox.mate(parent1, parent2)
+        if Genotype.global_rng.rand() < cxpb:
+            # Crossover
+            toolbox.mate(parent1, parent2)
         # Mutation
         toolbox.mutate(parent1)
         toolbox.mutate(parent2)

@@ -1,14 +1,18 @@
 {
     "hawks": {
-        "folder_name": "test",
+        "folder_name": null,
         "mode": "single",
         "n_objectives": 1,
         "num_runs": 2,
         "seed_num": 1,
         "save_best_data": false,
         "save_stats": false,
-        "plot_best": false,
-        "save_plot": false
+        "save_config": false
+    },
+    "objectives": {
+        "silhouette": {
+            "target": 0.8
+        }
     },
     "dataset": {
         "num_examples": 500,
@@ -20,8 +24,18 @@
     "ga": {
         "num_gens": 20,
         "num_indivs": 10,
+        "mut_method_mean": "random",
+        "mut_args_mean": {
+            "scale": 1.0,
+            "dims": "each"
+        },
+        "mut_method_cov": "haar",
+        "mut_args_cov": {
+            "power": 0.3
+        },
         "mut_prob_mean": "length",
         "mut_prob_cov": "length",
+        "mate_scheme": "dv",
         "mate_prob": 0.7,
         "prob_fitness": 0.5,
         "elites": 0.2
@@ -34,11 +48,6 @@
         "eigenval_ratio": {
             "threshold": 1,
             "limit": "lower"
-        }
-    },
-    "objectives": {
-        "silhouette": {
-            "target": 0.8
         }
     }
 }
