@@ -123,8 +123,10 @@ class BaseGenerator:
         for key in defaults:
             # Check if the config specifies the key
             if key in config:
+                if config[key] is None:
+                    continue
                 # Recurse if needed
-                if isinstance(defaults[key], dict):
+                elif isinstance(defaults[key], dict):
                     BaseGenerator._merge_default_config(
                         config[key], defaults[key]
                     )
@@ -139,10 +141,14 @@ class BaseGenerator:
             path = []
         # Loop through given config
         for key in config:
+            if isinstance(config, list):
+                continue
             # Check that each key is in the defaults
             if key in defaults:
+                if config[key] is None:
+                    continue
                 # Recurse if needed
-                if isinstance(defaults[key], dict):
+                elif isinstance(defaults[key], dict):
                     BaseGenerator._check_config(
                         config[key], defaults[key], path + [str(key)]
                     )
@@ -499,8 +505,6 @@ class SingleObjective(BaseGenerator):
                     config["objectives"],
                     dataset_obj
                 )
-                # for indiv in pop:
-                #     print([clust.num_seed for clust in indiv])
                 # Store results from the initial population
                 results_dict = self._store_results(
                     results_dict, pop, num_run, 0, num_rows, objective_dict
@@ -520,9 +524,6 @@ class SingleObjective(BaseGenerator):
                     results_dict = self._store_results(
                         results_dict, pop, num_run, gen, num_rows, objective_dict
                     )
-                    # print("done")
-                    # if gen == 2:
-                    #     raise
                 # Want to now get the best indiv for this particular run
                 # Turn the weighted fitnesses into an array
                 # As single-objective, we extract the only value from tuple
@@ -730,7 +731,7 @@ class SingleObjective(BaseGenerator):
                     )
                 # Keep a reference to the most recent population
                 self.population = pop
-            
+
             self.stats = self.stats.append(
                 pd.DataFrame.from_dict(results_dict), ignore_index=True
             )

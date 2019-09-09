@@ -17,7 +17,7 @@ class Objective(abc.ABC):
     # Subclass implementations will still need to declare @staticmethod
     @staticmethod
     @abc.abstractmethod
-    def eval_objective():
+    def eval_objective(indiv):
         """Evaluates the objective on an individual/solution"""
 
     @classmethod
@@ -61,7 +61,9 @@ class Silhouette(ClusterIndex):
 
     @staticmethod
     def calc_distances(data, metric="sqeuclidean"):
-        return squareform(pdist(data, metric=metric))
+        return squareform(
+            pdist(data, metric=metric)
+        )
 
     @staticmethod
     def calc_intraclusts(indiv, clust_list):
@@ -89,14 +91,14 @@ class Silhouette(ClusterIndex):
                 np.mean(clust_array, axis=1), indiv.b_vals[c1_start:c1_stop])
 
     @staticmethod
-    def recompute_dists(indiv, clust_list):
+    def recompute_dists(indiv, clust_list, metric="sqeuclidean"):
         # Recompute the distances only for the clusters that have moved
         for i in clust_list:
             start, stop = indiv.positions[i]
             new_dists = cdist(
                 indiv.all_values,
                 indiv.all_values[start:stop, :],
-                metric="sqeuclidean"
+                metric=metric
             )
             # Update the matrix
             indiv.distances[:, start:stop] = new_dists
