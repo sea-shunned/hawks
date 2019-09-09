@@ -22,7 +22,7 @@ matplotlib.rcParams['axes.labelsize'] = 12
 
 sns.set_style("whitegrid")
 
-def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="inferno", fig_format="png", global_seed=None, save=False, show=True, remove_axis=False, fig_title=None):
+def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="inferno", fig_format="png", global_seed=None, save=False, show=True, remove_axis=False, fig_title=None, **kwargs):
     # If no guidance is given, set it close to a square
     if nrows is None and ncols is None:
         # Get the square root for how many plots we need
@@ -55,7 +55,8 @@ def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="inferno", fig_for
             multiple=True,
             cmap=cmap,
             global_seed=global_seed,
-            remove_axis=remove_axis
+            remove_axis=remove_axis,
+            **kwargs
         )
     if fig_title is not None:
         fig.suptitle(fig_title)
@@ -68,17 +69,31 @@ def plot_pop(indivs, nrows=None, ncols=None, fpath=None, cmap="inferno", fig_for
     # Close the figure (and its window)
     plt.close(fig)
 
-def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None, cmap="inferno", fig_format="png", global_seed=None, remove_axis=False):
+def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None, cmap="inferno", fig_format="png", global_seed=None, remove_axis=False, **kwargs):
     if multiple and ax is None:
         raise ValueError(f"An axis object must be supplied if plotting multiple indivs")
     # Create the figure and axis if called in isolation
     if not multiple:
         # Create the mpl objects
         fig, ax = plt.subplots(1, 1)
-    # Get the colormap and apply
-    cmap = cm.get_cmap(cmap)
-    # colors = cmap(np.linspace(0, 1, len(indiv)+1))
-    colors = cmap(np.linspace(0, 1, len(indiv)))
+    try:
+        # Get the colormap and apply
+        cmap = cm.get_cmap(cmap)
+        colors = cmap(np.linspace(0, 1, len(indiv)))
+    # Not a valid colourmap
+    except ValueError:
+        # A list of colours may have been given
+        if isinstance(cmap, list):
+            # Not of right length
+            if len(cmap) != len(indiv):
+                raise ValueError(f"If a list of colours is given, must be of length {len(indiv)}")
+        # Duplicate the colour, as cmap wasn't given
+        elif matplotlib.colors.is_color_like(cmap):
+            colors = [cmap] * len(indiv)
+        # Bad input, revert to default
+        else:
+            cmap = cm.get_cmap("inferno")
+            colors = cmap(np.linspace(0, 1, len(indiv)))
     # Copy the indiv so we don't modify the original
     indiv = deepcopy(indiv)
     # Perform PCA if needed
@@ -96,7 +111,7 @@ def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None
         pca = None
     # Plot each cluster
     for i, cluster in enumerate(indiv):
-        plot_cluster(ax, cluster, colors[i], pca=pca)
+        plot_cluster(ax, cluster, colors[i], pca=pca, **kwargs)
     # Remove the axis if need be
     if remove_axis:
         ax.axis('off')
@@ -110,7 +125,7 @@ def plot_indiv(indiv, ax=None, multiple=False, save=False, show=True, fpath=None
         # Close the figure (and its window)
         plt.close(fig)
 
-def plot_cluster(ax, cluster, color, add_patch=True, add_data=True, patch_color=None, hatch=None, pca=None):
+def plot_cluster(ax, cluster, color, add_patch=True, add_data=True, patch_color=None, hatch=None, pca=None, patch_alpha=0.25, point_size=20):
     # Add the patch to show the area of the Gaussian
     if add_patch:
         # Rotate the cov
@@ -124,21 +139,25 @@ def plot_cluster(ax, cluster, color, add_patch=True, add_data=True, patch_color=
         if patch_color is None:
             patch_color = color
         # Add the patch to the axes
-        ax = add_ellipse(ax, cluster.mean, cov, patch_color, hatch)
+        ax = add_ellipse(
+            ax, cluster.mean, cov, patch_color,
+            hatch, patch_alpha
+        )
         # Needs to be called when adding patches
         # https://github.com/matplotlib/matplotlib/pull/3936
         ax.autoscale_view()
+        ax.axis('equal')
     # Whether to add the data (or just plot ellipse)
     if add_data:
         ax.scatter(
             cluster.values[:, 0], cluster.values[:, 1],
-            alpha=0.9, s=20, c=[color]
+            alpha=0.9, s=point_size, c=[color]
         )
     else:
         # We need the data to be there, just make it invisible
         ax.scatter(
             cluster.values[:, 0], cluster.values[:, 1],
-            alpha=0, s=20, c=[color]
+            alpha=0, s=point_size, c=[color]
         )
     return ax
 
@@ -152,14 +171,14 @@ def cov_ellipse(cov, q=None, nsig=None):
     else:
         raise ValueError('One of `q` and `nsig` should be specified.')
     r2 = chi2.ppf(q, 2)
-    
+
     val, vec = np.linalg.eigh(cov)
-    
+
     width, height = 2 * np.sqrt(val[:, None] * r2)
     rotation = np.degrees(np.arctan2(*vec[::-1, 0]))
     return width, height, rotation
 
-def add_ellipse(ax, mean, cov, patch_color='grey', hatch=None):
+def add_ellipse(ax, mean, cov, patch_color='grey', hatch=None, patch_alpha=0.25):
     # Get the properties of the ellipse
     width, height, rotation = cov_ellipse(cov, nsig=3)
     # Add the patch with the provided args
@@ -168,7 +187,7 @@ def add_ellipse(ax, mean, cov, patch_color='grey', hatch=None):
         width=width,
         height=height,
         angle=rotation,
-        alpha=0.25,
+        alpha=patch_alpha,
         facecolor=patch_color,
         edgecolor="k",
         hatch=hatch,
