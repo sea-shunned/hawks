@@ -47,38 +47,48 @@ def create_toolbox(objective_dict, dataset_obj, ga_params):
     toolbox = select_mutation(toolbox, dataset_obj, ga_params)
     # Select the crossover function
     toolbox = select_crossover(toolbox, ga_params)
+    # Select the parental selection function
+    toolbox = select_parent_func(toolbox, ga_params)
+    # Select the environmental selection function
+    toolbox = select_environ_func(toolbox, ga_params)
     # Register the evaluation function
     toolbox.register("evaluate", evaluate_indiv, objective_dict=objective_dict)
-    # Register parental selection
-    toolbox.register(
-        "parent_selection", parental_selection,
-        offspring_size=ga_params["num_indivs"]
-    )
-    # Register environmental selection
-    toolbox.register(
-        "environment_selection", stochastic_ranking,
-        ga_params=ga_params
-    )
     return toolbox
 
 def select_mutation(toolbox, dataset_obj, ga_params):
+    # Local references for cleanliness
+    # Mean
+    mean_method = ga_params["mut_method_mean"]
+    mean_args = ga_params["mut_args_mean"][mean_method]
+    # Covariance
+    cov_method = ga_params["mut_method_cov"]
+    cov_args = ga_params["mut_args_cov"][cov_method]
     # Select the appropriate mean mutation function
     if ga_params["mut_method_mean"] == "random":
         mut_mean_func = Cluster.mutate_mean_random
+    elif ga_params["mut_method_mean"] == "rails":
+        mut_mean_func = Cluster.mutate_mean_rails
     elif ga_params["mut_method_mean"] == "pso":
-        # **TODO**
-        raise NotImplementedError
+        mut_mean_func = Cluster.mutate_mean_pso
+    elif ga_params["mut_method_mean"] == "pso_informed":
+        mut_mean_func = Cluster.mutate_mean_pso_informed
+    elif ga_params["mut_method_mean"] == "de":
+        mut_mean_func = Cluster.mutate_mean_de
     else:
         raise ValueError(f"{ga_params['mut_method_mean']} is not a valid method to mutate the mean")
     # Create a partial function with the mean function and it's given arguments
-    mut_mean_func = partial(mut_mean_func, **ga_params["mut_args_mean"])
+    mut_mean_func = partial(
+        mut_mean_func, **mean_args
+    )
     # Select the appropriate covariance mutation function
-    if ga_params["mut_method_cov"] == "haar":
+    if cov_method == "haar":
         mut_cov_func = Cluster.mutate_cov_haar
     else:
-        raise ValueError(f"{ga_params['mut_method_cov']} is not a valid method to mutate the covariance")
+        raise ValueError(f"{cov_method} is not a valid method to mutate the covariance")
     # Create a partial function with the covariance function and it's given arguments
-    mut_cov_func = partial(mut_cov_func, **ga_params["mut_args_cov"])
+    mut_cov_func = partial(
+        mut_cov_func, **cov_args
+    )
     # Register the mutation function
     toolbox.register(
         "mutate",
@@ -116,6 +126,51 @@ def select_crossover(toolbox, ga_params):
         raise ValueError(f'{ga_params["mate_scheme"]} is not a valid mutation scheme')
     # Register crossover
     toolbox.register("mate", mate_func)
+    return toolbox
+
+def select_parent_func(toolbox, ga_params):
+    sel_method = ga_params["parent_selection"].lower()
+    # Remove some common characters
+    transtable = str.maketrans({
+        "-": "",
+        "_": "",
+        " ": ""
+    })
+    sel_method = sel_method.translate(transtable)
+    # Use our modified binary tournament
+    if sel_method == "binary" or sel_method == "binarytournament" or sel_method == "tournament":
+        sel_func = binary_tournament
+    # Use original binary tournament
+    elif sel_method == "tournamentfitness":
+        sel_func = binary_tournament_fitness
+    # Register parental selection
+    toolbox.register(
+        "parent_selection",
+        sel_func,
+        offspring_size=ga_params["num_indivs"]
+    )
+    return toolbox
+
+def select_environ_func(toolbox, ga_params):
+    sel_method = ga_params["environ_selection"].lower()
+    # Remove some common characters
+    transtable = str.maketrans({
+        "-": "",
+        "_": "",
+        " ": ""
+    })
+    sel_method = sel_method.translate(transtable)
+
+    if sel_method == "sr" or sel_method == "stochasticranking":
+        sel_func = stochastic_ranking
+    else:
+        raise ValueError(f"{sel_method} is not a recognized option for environmental selection")
+    # Register environmental selection
+    toolbox.register(
+        "environment_selection",
+        sel_func,
+        ga_params=ga_params
+    )
     return toolbox
 
 def generate_indiv(icls, dataset_obj):
@@ -167,25 +222,51 @@ def reset_changed_flags(indiv):
     for cluster in indiv:
         cluster.changed = False
 
-def parental_selection(pop, offspring_size):    
+def binary_tournament(pop, offspring_size):
+    parents = []
+    # Just in case offspring size is different to popsize
+    length = len(pop)
+    # Run a tournament to get a parent the needed number of times
+    for _ in range(offspring_size):
+        # Take the minimum as the pop is sorted in ranking order
+        winner = np.min(Genotype.global_rng.randint(length, size=2))
+        # Add the parent to the list
+        parents.append(pop[winner])
+    # Duplicate if we have a pop size of 1
+    if not parents:
+        parents = [pop[0], pop[0]]
+    return parents
+
+def binary_tournament_fitness(pop, offspring_size):
     parents = []
     # Just in case offspring size is different to popsize
     length = len(pop)
     # Create a list of tuples, each with 2 parents in
-    for _ in range(int(offspring_size/2)):
-        # Take the minimum as the pop is sorted in ranking order
-        index1 = np.min(Genotype.global_rng.randint(length, size=2))
-        index2 = index1
-        while index2 == index1:
-            index2 = np.min(Genotype.global_rng.randint(length, size=2))
-        # Add this pair to the parent list
-        parents.append(
-            (pop[index1], pop[index2])
-        )
+    for _ in range(offspring_size):
+        # Get two random indices
+        ind1, ind2 = Genotype.global_rng.randint(length, size=2)
+        # See if the 1st index is better
+        if pop[ind1].fitness.wvalues > pop[ind2].fitness.wvalues:
+            winner = ind1
+        # See if the 2nd index is better
+        elif pop[ind2].fitness.wvalues > pop[ind1].fitness.wvalues:
+            winner = ind2
+        # If they are equal, just pick one
+        else:
+            winner = ind1
+        # Add the parent to the list
+        parents.append(pop[winner])
     # Duplicate if we have a pop size of 1
     if not parents:
         parents = [(pop[0], pop[0])]
     return parents
+
+def roulette_wheel_selection(pop, offspring_size):
+    import pdb; pdb.set_trace()
+    fitnesses = [indiv.fitness.values for indiv in pop]
+    max_fitness = np.max(fitnesses)
+    # https://stackoverflow.com/questions/10324015/fitness-proportionate-selection-roulette-wheel-selection-in-python
+    # http://www.keithschwarz.com/darts-dice-coins/
 
 def stochastic_ranking(pop, ga_params):
     # Avoid lookups for things in loop
@@ -243,16 +324,19 @@ def generation(pop, toolbox, constraint_params, cxpb):
         indiv.recreate_views()
     # Select the parents
     offspring = toolbox.parent_selection(offspring)
-    # Create offspring - this happens in place so the parents actually become the children (hence the cloning)
-    for parent1, parent2 in offspring:
-        if Genotype.global_rng.rand() < cxpb:
-            # Crossover
-            toolbox.mate(parent1, parent2)
-        # Mutation
-        toolbox.mutate(parent1)
-        toolbox.mutate(parent2)
-    # Flatten the list of tuples
-    offspring = [parent for tup in offspring for parent in tup]
+    # Create offspring
+    # Occurs in place so the parents become the children (hence the cloning)
+    # No crossover for single individual
+    if len(offspring) == 1:
+        toolbox.mutate(offspring[0])
+    else:
+        for parent1, parent2 in zip(offspring[::2], offspring[1::2]):
+            if Genotype.global_rng.rand() < cxpb:
+                # Crossover
+                toolbox.mate(parent1, parent2)
+            # Mutation
+            toolbox.mutate(parent1)
+            toolbox.mutate(parent2)
     # Resample the values
     for indiv in offspring:
         indiv.resample_values()

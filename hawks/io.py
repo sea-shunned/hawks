@@ -96,6 +96,8 @@ def load_folder(folder_path):
     config_path = list(folder_path.glob("*_config.json"))
     if len(config_path) > 1:
         raise ValueError("More than one config found - unsure which is the main one.")
+    elif not config_path:
+        raise ValueError("No config found - was one not saved?")
     else:
         config_path = config_path[0]
     # Create the generator object
@@ -112,12 +114,21 @@ def load_folder(folder_path):
     if len(stats_path) > 1:
         raise ValueError("More than one stats csv found, unsure which is the main one.")
     else:
-        stats_path = stats_path[0]
-    # Load the stats CSV
-    gen.stats = pd.read_csv(
-        stats_path,
-        index_col=False
-    )
+        # Try to load the stats
+        try:
+            stats_path = stats_path[0]
+            # Load the stats CSV
+            gen.stats = pd.read_csv(
+                stats_path,
+                index_col=False
+            )
+        except IndexError:
+            warnings.warn(
+                message=f"No stats csv was found",
+                category=UserWarning
+            )
+            # Set as None
+            gen.stats = None
     # Load the datasets
     dataset_paths = list(folder_path.glob("datasets/*"))
     # Check if there is actually anything to load

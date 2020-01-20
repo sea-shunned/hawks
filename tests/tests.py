@@ -1,9 +1,8 @@
 import unittest
-import sys
 import numpy as np
 from sklearn.metrics import silhouette_score
 import pandas as pd
-sys.path.append('..')
+
 import hawks
 from hawks.cluster import Cluster
 from hawks.dataset import Dataset
@@ -332,6 +331,60 @@ class EvolutionaryTests(unittest.TestCase):
         overlaps_after = np.sum([indiv.constraints["overlap"] for indiv in pop])
         self.assertAlmostEqual(overlaps_before, overlaps_after)
 
+    # def test_tournament_selection(self):
+    #     parents = hawks.ga.binary_tournament(
+    #         self.init_pop,
+    #         offspring_size=len(self.init_pop)
+    #     )
+
+    def test_stochastic_ranking_fitness(self):
+        pop = []
+        for i, fit in enumerate(range(len(self.init_pop), 0, -1)):
+            indiv = self.init_pop[i]
+            indiv.fitness.values = (fit,)
+            setattr(indiv, "ind", i)
+            pop.append(indiv)
+
+        new_pop = hawks.ga.stochastic_ranking(
+            pop,
+            ga_params={
+                "prob_fitness": 1,
+                "num_indivs": len(self.init_pop),
+                "elites": 0
+            }
+        )
+        fit_aux = -1
+
+        for i, indiv in enumerate(new_pop):
+            with self.subTest(i=i):
+                self.assertGreater(indiv.fitness.values[0], fit_aux)
+            fit_aux = indiv.fitness.values[0]
+
+    def test_stochastic_ranking_constraints(self):
+        pop = []
+        for i, pen in enumerate(range(len(self.init_pop), 0, -1)):
+            indiv = self.init_pop[i]
+            indiv.penalty = pen
+            setattr(indiv, "ind", i)
+            pop.append(indiv)
+
+        new_pop = hawks.ga.stochastic_ranking(
+            pop,
+            ga_params={
+                "prob_fitness": 0,
+                "num_indivs": len(self.init_pop),
+                "elites": 0
+            }
+        )
+
+        pen_aux = -1
+
+        for i, indiv in enumerate(new_pop):
+            with self.subTest(i=i):
+                self.assertLess(pen_aux, indiv.penalty)
+            pen_aux = indiv.penalty
+
+        
 class DatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -396,7 +449,7 @@ class DatasetTests(unittest.TestCase):
         obj = Dataset(**kwargs)
 
         self.assertLessEqual(obj.min_clust_size, obj.num_examples/obj.num_clusters)
-    
+
     def test_exact_min_clust_size(self):
         kwargs = self.args.copy()
         kwargs["num_examples"] = 200
@@ -415,6 +468,9 @@ class ObjectiveTests(unittest.TestCase):
         Genotype.global_rng = rng
         Cluster.global_rng = rng
         sizes = [190, 20, 30, 110]
+        setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
         self.indiv = Genotype([Cluster(size) for size in sizes])
         self.indiv.create_views()
         self.indiv.resample_values()
@@ -490,7 +546,9 @@ class HawksTests(unittest.TestCase):
             "ga": {
                 "num_gens": [50, 100, 10, 200],
                 "mut_args_mean": {
-                    "dims": ["each", "all"]
+                    "random": {
+                        "dims": ["each", "all"]
+                    }
                 }
             }
         }

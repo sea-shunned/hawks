@@ -19,7 +19,7 @@ import pandas as pd
 
 import hawks.ga as ga
 import hawks.plotting as plotting
-import hawks.prepare as prepare
+import hawks.objectives as objectives
 import hawks.utils as utils
 from hawks.cluster import Cluster
 from hawks.dataset import Dataset
@@ -83,6 +83,7 @@ class BaseGenerator:
         self.n_objectives = config["hawks"]["n_objectives"]
         self.num_runs = config["hawks"]["num_runs"]
         self.seed_num = config["hawks"]["seed_num"]
+        self.comparison = config["hawks"]["comparison"]
         self.save_best_data = config["hawks"]["save_best_data"]
         self.save_stats = config["hawks"]["save_stats"]
         self.save_config_flag = config["hawks"]["save_config"]
@@ -222,10 +223,10 @@ class BaseGenerator:
     @staticmethod
     def _check_multiconfig(config):
         """Check if a list exists in the config i.e. it defines a set of parameters
-        
+
         Arguments:
             config {dict} -- Config dictionary
-        
+
         Returns:
             bool -- Whether the config defines a set of parameters
         """
@@ -333,9 +334,9 @@ class BaseGenerator:
 
     def plot_best_indivs(self, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, fig_title=None, nrows=None, ncols=None):
         """Plot the best individuals from each run, for each config.
-        
+
         A separate plot is made for each config, with the best from each run plotted together.
-        
+
         Keyword Arguments:
             cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
             fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
@@ -354,6 +355,8 @@ class BaseGenerator:
             # Get the path if saving
             if save:
                 filename = f"config-{config_id}_best-indivs"
+            else:
+                filename = None
             # Plot the indivs for this config
             self.plot_datasets(
                 config_set,
@@ -364,16 +367,15 @@ class BaseGenerator:
                 fig_format=fig_format,
                 save=save,
                 show=show,
-                global_seed=self.seed_num,
                 remove_axis=remove_axis,
                 fig_title=fig_title
             )
 
-    def plot_datasets(self, datasets, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None):
+    def plot_datasets(self, datasets, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None, folder=None, **kwargs):
         """Plot the best individuals from each run, for each config.
-        
+
         A separate plot is made for each config, with the best from each run plotted together.
-        
+
         Keyword Arguments:
             cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
             datasets {BaseGenerator} -- The individuals/datasets to be plotted
@@ -388,7 +390,10 @@ class BaseGenerator:
         """
         # Sort out folders if saving
         if save:
-            plot_folder = self._plot_save_setup()
+            if folder is None:
+                plot_folder = self._plot_save_setup()
+            else:
+                plot_folder = folder
         # Get the path if saving
         if save or filename is not None:
             # Construct filename if not supplied
@@ -413,29 +418,9 @@ class BaseGenerator:
             show=show,
             global_seed=self.seed_num,
             remove_axis=remove_axis,
-            fig_title=fig_title
+            fig_title=fig_title,
+            **kwargs
         )
-
-    def create_individual(self):
-        """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
-        """
-        if self.multi_config:
-            raise ValueError(f"Not available in multi_config mdoe - Need a single config to generate an individual from")
-        # Create the RandomState instance
-        self.set_global_rng(self.seed_num)
-        # Create the Dataset instance
-        dataset_obj = Dataset(**self.full_config["dataset"])
-        # Setup some attributes for the Cluster class
-        Cluster.setup_variables(dataset_obj, self.full_config["ga"])
-        # Setup the GA
-        objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
-            self.full_config["ga"],
-            self.full_config["constraints"],
-            self.full_config["objectives"],
-            dataset_obj
-        )
-        # Take from the initial population
-        yield from pop
 
 class SingleObjective(BaseGenerator):
     def __init__(self, config, any_saving, multi_config):
@@ -464,7 +449,8 @@ class SingleObjective(BaseGenerator):
         return total_configs, key_paths, param_lists
 
     def run(self):
-        [_ for _ in self.run_step()]
+        for _ in self.run_step():
+            pass
 
     def run_step(self):
         total_configs, key_paths, param_lists = self._setup()
@@ -499,12 +485,7 @@ class SingleObjective(BaseGenerator):
                 # Setup some attributes for the Cluster class
                 Cluster.setup_variables(dataset_obj, config["ga"])
                 # Setup the GA
-                objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
-                    config["ga"],
-                    config["constraints"],
-                    config["objectives"],
-                    dataset_obj
-                )
+                objective_dict, pop = self.setup_ga(dataset_obj)
                 # Store results from the initial population
                 results_dict = self._store_results(
                     results_dict, pop, num_run, 0, num_rows, objective_dict
@@ -524,25 +505,7 @@ class SingleObjective(BaseGenerator):
                     results_dict = self._store_results(
                         results_dict, pop, num_run, gen, num_rows, objective_dict
                     )
-                # Want to now get the best indiv for this particular run
-                # Turn the weighted fitnesses into an array
-                # As single-objective, we extract the only value from tuple
-                fitnesses = np.array([x.fitness.wvalues[0] for x in pop])
-                # Get the indices of the best individuals
-                best_indices = np.argwhere(fitnesses == np.max(fitnesses)).flatten().tolist()
-                # Select first indiv as the best one
-                best_indiv_run = pop[best_indices[0]]
-                # If there is more than one, compare with the others
-                if len(best_indices) > 1:
-                    # Iteratively compare against others, taking best from each
-                    for curr_index in best_indices[1:]:
-                        best_indiv_run = self._compare_individuals(
-                            pop[curr_index], best_indiv_run
-                        )
-                    # Get the index of the best individual
-                    best_index = pop.index(best_indiv_run)
-                else:
-                    best_index = best_indices[0]
+                best_indiv_run, best_index = self._best_in_pop(pop)
                 # Store the best indiv from each run
                 self.best_each_run[-1].append(best_indiv_run)
                 # Add column to show best dataset from run
@@ -578,6 +541,67 @@ class SingleObjective(BaseGenerator):
                         fname=f"config-{config_num}_run-{run_num}_best_data"
                     )
 
+    def setup_ga(self, dataset_obj):
+        # Validate the constraints parameters
+        Genotype.validate_constraints(self.full_config["constraints"])
+        # Setup the objective parameters
+        objective_dict = self._setup_objectives()
+        # Create the DEAP toolbox and generate the initial population
+        toolbox, initial_pop = ga.main_setup(
+            objective_dict=objective_dict,
+            dataset_obj=dataset_obj,
+            ga_params=self.full_config["ga"],
+            constraint_params=self.full_config["constraints"]
+        )
+        # Set the DEAP toolbox as an attr
+        self.deap_toolbox = toolbox
+        # Return the objective dict and the initial population
+        return objective_dict, initial_pop
+
+    def _setup_objectives(self):
+        # Get the currently available/implemented objectives
+        avail_objectives = {
+            cls.__name__.lower():{'class':cls} for cls in objectives.ClusterIndex.__subclasses__()
+        }
+        # Create a dict to hold the objectives we select
+        objective_dict = {}
+        # Loop through the specified objectives
+        for selected_obj in self.full_config["objectives"]:
+            selected_obj = selected_obj.lower()
+            # Try to find it in the available objectives
+            try:
+                avail_objectives[selected_obj]
+            # If we can't find, say it's not been implemented
+            # More informative than a KeyError
+            except KeyError:
+                raise NotImplementedError(f"{selected_obj} is not implemented")
+            # Create the key:value in our dict to pass on
+            objective_dict[selected_obj] = avail_objectives[
+                selected_obj]
+            # Get the params for the objective(s)
+            obj_args = self.full_config["objectives"][selected_obj]
+            # Just for completeness
+            objective_dict[selected_obj]["kwargs"] = obj_args
+            # Set the kwargs for the class
+            objective_dict[selected_obj]['class'].set_kwargs(obj_args)
+        return objective_dict
+
+    def create_individual(self):
+        """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
+        """
+        if self.multi_config:
+            raise ValueError(f"Not available in multi_config mdoe - Need a single config to generate an individual from")
+        # Create the RandomState instance
+        self.set_global_rng(self.seed_num)
+        # Create the Dataset instance
+        dataset_obj = Dataset(**self.full_config["dataset"])
+        # Setup some attributes for the Cluster class
+        Cluster.setup_variables(dataset_obj, self.full_config["ga"])
+        # Setup the GA
+        objective_dict, pop = self.setup_ga(dataset_obj)
+        # Take from the initial population
+        yield from pop
+
     def get_best_dataset(self, return_config=False, reset=False):
         """
         Function for extracting the data and labels of the best dataset for every run per config.
@@ -599,6 +623,33 @@ class SingleObjective(BaseGenerator):
             return self.datasets, self.label_sets, self.config_list
         else:
             return self.datasets, self.label_sets
+
+    def _best_in_pop(self, pop):
+        if self.comparison == "ranking":
+            best_indiv = pop[0]
+            best_index = 0
+        elif self.comparison == "fitness":
+            # Turn the weighted fitnesses into an array
+            # As single-objective, we extract the only value from tuple
+            fitnesses = np.array([x.fitness.wvalues[0] for x in pop])
+            # Get the indices of the best individuals
+            best_indices = np.argwhere(fitnesses == np.max(fitnesses)).flatten().tolist()
+            # Select first indiv as the best one (if tied)
+            best_indiv = pop[best_indices[0]]
+            # If there is more than one, compare with the others
+            if len(best_indices) > 1:
+                # Iteratively compare against others, taking best from each
+                for curr_index in best_indices[1:]:
+                    best_indiv = self._compare_individuals(
+                        pop[curr_index], best_indiv
+                    )
+                # Get the index of the best individual
+                best_index = pop.index(best_indiv)
+            else:
+                best_index = best_indices[0]
+        else:
+            raise ValueError(f"Comparison method '{self.comparison}' not recognized")
+        return best_indiv, best_index
 
     def _best_across_runs(self):
         # Create container
@@ -657,7 +708,7 @@ class SingleObjective(BaseGenerator):
         else:
             return indiv2
 
-    def animate(self, record_stats=False):
+    def animate(self, record_stats=False, **kwargs):
         # Raise error if multi-config specified
         if self.multi_config:
             raise ValueError(f"Animation is not implemented for multi-config")
@@ -682,21 +733,17 @@ class SingleObjective(BaseGenerator):
             # Setup some attributes for the Cluster class
             Cluster.setup_variables(dataset_obj, self.full_config["ga"])
             # Setup the GA
-            objective_dict, self.deap_toolbox, pop = prepare.setup_ga(
-                self.full_config["ga"],
-                self.full_config["constraints"],
-                self.full_config["objectives"],
-                dataset_obj
-            )
+            objective_dict, pop = self.setup_ga(dataset_obj)
+            # Plot the initial population
             plotting.plot_pop(
                 pop,
                 fpath=animate_folder / "gen-0",
-                cmap="viridis",
                 fig_format="png",
                 save=True,
                 remove_axis=True,
                 fig_title="Generation 0",
-                show=False
+                show=False,
+                **kwargs
             )
             if record_stats:
                 # Store results from the initial population
@@ -717,12 +764,12 @@ class SingleObjective(BaseGenerator):
                 plotting.plot_pop(
                     pop,
                     fpath=animate_folder / f"gen-{gen}",
-                    cmap="viridis",
                     fig_format="png",
                     save=True,
                     remove_axis=True,
                     fig_title=f"Generation {gen}",
-                    show=False
+                    show=False,
+                    **kwargs
                 )
                 if record_stats:
                     # Store results from each generation

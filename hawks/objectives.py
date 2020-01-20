@@ -159,3 +159,23 @@ class Silhouette(ClusterIndex):
             Silhouette.set_objective_attr(indiv, silh_width)
             # Return the distance to the target
             return np.abs(Silhouette.target - silh_width)
+
+# class ClusterAlg(Objective):
+#     scoring_method = None
+#     scoring_func = None
+
+#     def __init__(self):
+#         super(ClusterAlg, self).__init__(self)
+
+#     @classmethod
+#     def get_score_func(cls):
+#         pass
+
+#     @staticmethod
+#     def eval_objective(indiv):
+        
+#         alg = None
+
+#         pred = alg.fit(indiv.data)
+
+#         return ClusterAlg.scoring_func(pred, indiv.labels)

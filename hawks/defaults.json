@@ -5,6 +5,7 @@
         "n_objectives": 1,
         "num_runs": 1,
         "seed_num": null,
+        "comparison": "fitness",
         "save_best_data": false,
         "save_stats": false,
         "save_config": false
@@ -26,12 +27,31 @@
         "num_indivs": 10,
         "mut_method_mean": "random",
         "mut_args_mean": {
-            "scale": 1.0,
-            "dims": "each"
+            "random": {
+                "scale": 1.0,
+                "dims": "each"
+            },
+            "rails": {
+                "scalar_lower": 0.0,
+                "scalar_higher": 1.0
+            },
+            "pso": {
+                "scalar_lower": 0.0,
+                "scalar_higher": 1.0
+            },
+            "pso_informed": {
+                "scalar_lower": 0.0,
+                "scalar_higher": 1.0
+            },
+            "de": {
+                "F": 1.0
+            }
         },
         "mut_method_cov": "haar",
         "mut_args_cov": {
-            "power": 0.3
+            "haar": {
+                "power": 0.3
+            }
         },
         "mut_prob_mean": "length",
         "mut_prob_cov": "length",
@@ -40,7 +60,9 @@
         "prob_fitness": 0.5,
         "elites": 0,
         "initial_mean_upper": 1.0,
-        "initial_cov_upper": 0.5
+        "initial_cov_upper": 0.5,
+        "environ_selection": "sr",
+        "parent_selection": "tournament"
     },
     "constraints": {
         "overlap": {

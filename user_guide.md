@@ -11,7 +11,7 @@ To load in previous runs of `hawks`, `hawks.io.load_folder()` provides the abili
 ## Config File
 Parameters for `hawks` can be provided either as a dictionary, or from an external JSON file. A config can define either a single set of parameters, or when a list of parameters are provided then all possible parameter combinations are used (this is the `multi-config` setting).
 
-An example of both a single-set and multi-set config can be found in the `examples/` folder. In both cases, any parameter that is missing will be taken from the `hawks/defaults.json` file.
+An example of both a single-set and multi-set config can be found in the `examples/` folder. In both cases, any parameter that is missing will be taken from the `hawks/defaults.json` file. Also see that file as an example if any explanation below is unclear.
 
 Below is a brief description of each of the parameters, split into their major sections:
 
@@ -21,10 +21,10 @@ Below is a brief description of each of the parameters, split into their major s
 * `"n_objectives"`: This is the number of objectives to be optimized, which can only be 1 at the moment.
 * `"num_runs"`: The number of runs with `hawks` with different seed numbers.
 * `"seed_num"`: This is the seed number that will be used to generate the seed numbers for each individual run (according to `num_runs`). If one is not provided, it is generated randomly, and saved back into the original config for reproducibility. When `"num_runs"` > 1, the subsequent seeds are based on this initial one.
+* `"comparison"`: Method to extract the best individual from the final population. Using "fitness" selects the individual with the best fitness, whereas "ranking" selects the first individual from the population sorted by stochastic ranking.
 * `"save_best_data"`: Save the dataset from the best (most fit) individual across for each run for each config.
 * `"save_stats"`: Save the output values (fitness, penalities etc.) for every individual.
-* `"plot_best"`: Flag to call the `plot_best_indivs()` method to plot the best individual for each run for each config.
-* `"save_plot"`: For the above command, determines whether the plot should be saved (`True`) or just displayed (`False`).
+* `"save_config"`: Flag to save the (full) config associated with the run.
 
 #### Objective Params
 For the `"objectives"` JSON object, it is expected to be in the form below:
@@ -53,9 +53,9 @@ At present, only one objective is available, under the name `"silhouette"`, whic
 * `"num_gens"`: The number of generations to evolve over.
 * `"num_indivs"`: The number of individuals in a population.
 * `"mut_method_mean"`: The method used to mutate the mean. At present, only `"random"` is available.
-* `"mut_args_mean"`: The arguments for the above, in the format required by the function for this mutation.
+* `"mut_args_mean"`: The arguments for the above, in the format required by the function for this mutation (with the name of the method as the key).
 * `"mut_method_cov"`: The method used to mutate the covariance. At present, only `"haar"` is available.
-* `"mut_args_cov"`: The arguments for the above, in the format required by the function for this mutation.
+* `"mut_args_cov"`: The arguments for the above, in the format required by the function for this mutation (with the name of the method as the key).
 * `"mut_prob_mean"`: The mutation probability to mutate the mean. Either a float between 0 & 1, or use `"length"` to calculate the probability based on the length of the genotype (recommended).
 * `"mut_prob_cov"`: The mutation probability to mutate the covariance. Either a float between 0 & 1, or use `"length"` to calculate the probability based on the length of the genotype (recommended).
 * `"mate_scheme"`: The method for crossover. At the moment, accepts either `"dv"` (which can swap the mean and covariance separately between individuals), or `"cluster"` (which swaps whole clusters between individuals).

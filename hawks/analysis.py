@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import sklearn.cluster
 import sklearn.mixture
-from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
+from sklearn.metrics import adjusted_rand_score
 
 import hawks.utils
 import hawks.problem_features
@@ -25,49 +25,55 @@ warnings.filterwarnings(
 
 def define_cluster_algs(seed):
     cluster_algs = {
-        "K-Means++": {
-            "class": getattr(sklearn.cluster, "KMeans"),
-            "kwargs": {
-                "n_clusters": None,
-                "random_state": seed,
-                "n_init": 10
-            }
-        },
-        "Single-Linkage": {
-            "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
-            "kwargs": {
-                "n_clusters": None,
-                "linkage": "single"
-            }
-        },
         "Average-Linkage": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
             "kwargs": {
                 "linkage": "average",
                 "n_clusters": None
-            }
-        },
-        "Single-Linkage (Double)": {
-            "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
-            "kwargs": {
-                "linkage": "single",
-                "n_clusters": 2.0
-            }
+            },
+            "cluster_multiplier": None
         },
         "Average-Linkage (Double)": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
             "kwargs": {
                 "linkage": "average",
-                "n_clusters": 2.0
-            }
+                "n_clusters": None
+            },
+            "cluster_multiplier": 2.0
         },
         "GMM": {
             "class": getattr(sklearn.mixture, "GaussianMixture"),
             "kwargs": {
                 "n_components": None,
                 "random_state": seed,
-                "n_init": 5
-            }
+                "n_init": 3
+            },
+            "cluster_multiplier": None
+        },
+        "K-Means++": {
+            "class": getattr(sklearn.cluster, "KMeans"),
+            "kwargs": {
+                "n_clusters": None,
+                "random_state": seed,
+                "n_init": 10
+            },
+            "cluster_multiplier": None
+        },
+        "Single-Linkage": {
+            "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
+            "kwargs": {
+                "linkage": "single",
+                "n_clusters": None
+            },
+            "cluster_multiplier": None
+        },
+        "Single-Linkage (Double)": {
+            "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
+            "kwargs": {
+                "linkage": "single",
+                "n_clusters": None
+            },
+            "cluster_multiplier": 2.0
         }
     }
     return cluster_algs
@@ -202,16 +208,20 @@ def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
         res_dict["source"].append(source)
         res_dict["config_num"].append(config_num)
         res_dict["dataset_num"].append(dataset_num)
+        # Add some extra general info about the dataset here
+        res_dict["num_examples"].append(int(data.shape[0]))
+        res_dict["num_clusters"].append(int(np.unique(labels).shape[0]))
         # Loop over the dict of clustering algorithms
         for name, d in alg_dict.items():
             # Add in the number of clusters
-            d["kwargs"] = determine_num_clusters(name, d["kwargs"], labels)
+            d["kwargs"] = determine_num_clusters(name, d["kwargs"], d["cluster_multiplier"], labels)
             # Pass the kwargs to the relevant algorithm class
             alg = d["class"](**d["kwargs"])
             # Run the algorithm
             alg.fit(data)
             # Predict labels and compare if we have the truth
             if labels is not None:
+                # import pdb; pdb.set_trace()
                 # Obtain labels for this algorithm on this dataset
                 if hasattr(alg, "labels_"):
                     labels_pred = alg.labels_.astype(np.int)
@@ -241,6 +251,9 @@ def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, sourc
         res_dict["source"].append(source)
         res_dict["config_num"].append(config_num)
         res_dict["dataset_num"].append(dataset_num)
+        # Add some extra general info about the dataset here
+        res_dict["num_examples"].append(int(data.shape[0]))
+        res_dict["num_clusters"].append(int(np.unique(labels).shape[0]))
         # Calculate the feature values for this problem/data
         for name, func in feature_dict.items():
             res_dict[f"f_{name}"].append(func(data, labels))
@@ -253,7 +266,7 @@ def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, sourc
         )
     return df
 
-def determine_num_clusters(col_name, alg_kwargs, labels):
+def determine_num_clusters(col_name, alg_kwargs, multiplier, labels):
     # Fix annoying inconsistency with sklearn arg names
     if col_name == "GMM":
         arg = "n_components"
@@ -263,11 +276,15 @@ def determine_num_clusters(col_name, alg_kwargs, labels):
     if arg in alg_kwargs:
         # Calc the actual number of clusters
         num_clusts = np.unique(labels).shape[0]
-        # Set this as the target
-        if alg_kwargs[arg] is None:
-            alg_kwargs[arg] = int(num_clusts)
-        # Use a multiplier if given
-        elif isinstance(alg_kwargs[arg], float):
-            multiplier = alg_kwargs[arg]
-            alg_kwargs[arg] = int(num_clusts * multiplier)
+        # Set multiplier to 1 if there isn't one
+        if multiplier is None:
+            multiplier = 1
+        # Calculate what will be given to the algorithm
+        given_clusts = int(num_clusts * multiplier)
+        # Insert the argument
+        alg_kwargs[arg] = given_clusts
+        # Ensure that the correct number is being inserted
+        assert alg_kwargs[arg] == given_clusts
+    else:
+        raise KeyError(f"{arg} was not found in {col_name}'s kwargs: {alg_kwargs}")
     return alg_kwargs

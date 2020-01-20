@@ -203,10 +203,10 @@ class Genotype(list):
 
         Arguments given must be functions for mutating the mean and covariance. Can use functools.partial to freeze other arguments if need be - see select_mutation() in ga.py for more.
         """
-        for cluster in self:
+        for i, cluster in enumerate(self):
             # Mean mutation
             if Genotype.global_rng.rand() < Genotype.mutpb_mean:
-                cluster.mean = mut_mean_func(cluster)
+                cluster.mean = mut_mean_func(cluster, genotype=self)
                 cluster.changed = True
             # Covariance mutation
             if Genotype.global_rng.rand() < Genotype.mutpb_cov:

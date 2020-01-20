@@ -19,7 +19,8 @@ def setup_ga(ga_params, constraint_params, objective_params, dataset_obj):
 def _setup_objectives(objective_params):
     # Get the currently available/implemented objectives
     avail_objectives = {
-        cls.__name__.lower():{'class':cls} for cls in objectives.ClusterIndex.__subclasses__()}
+        cls.__name__.lower():{'class':cls} for cls in objectives.ClusterIndex.__subclasses__()
+    }
     # Create a dict to hold the objectives we select
     objective_dict = {}
     # Loop through the specified objectives
