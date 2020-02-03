@@ -1,7 +1,4 @@
-"""
-Defines the overarching Generator class for HAWKS. Intended to be the outward-facing class that users interact with, pulling everything else together.
-
-Refactoring/abstraction may be required as more subclasses of the BaseGenerator are added.
+"""Defines the overarching Generator class for HAWKS. Intended to be the outward-facing class that users interact with, pulling everything else together.
 """
 from itertools import product
 from pathlib import Path
@@ -27,14 +24,20 @@ from hawks.genotype import Genotype
 
 warnings.filterwarnings("ignore", module="deap", category=RuntimeWarning)
 
+
 def create_generator(config=None):
-    """Creates a generator instance according to the input parameters. If no argument is given, default values will be used according to "defaults.json". 
+    """Function to create a generator (of the relevant sub-class of :class:`~hawks.generator.BaseGenerator`) to be used to generate datasets. This is preferential to calling the class directly, particularly in future versions of HAWKS.
     
-    Keyword Arguments:
-        config {str/Path, or dict} -- Either a dict or a string/Path to the JSON that specifies the parameters to be given to the generator. Any omitted parameter will take from "defaults.json". (default: {None})
+    Args:
+        config (dict, str, :class:`~pathlib.Path`, optional): A dictionary or path to a JSON file with the parameters for HAWKS. Defaults to None, whereby the defaults are used.
+    
+    Raises:
+        FileNotFoundError: If a path-like object is given, but the file cannot be found.
+        TypeError: If an object is given that cannot be interpreted into a config file (i.e. not a ``dict`` or a path-like object).
+        ValueError: If an incorrect mode for HAWKS is provided.
     
     Returns:
-        BaseGenerator subclass -- An instance of the appropriate class of the BaseGenerator (i.e. SingleObjective) will be returned, according to input
+        :class:`~hawks.generator.BaseGenerator`: The initialized generator instance.
     """
     # Load the default if nothing is given
     if config is None:
@@ -70,8 +73,22 @@ def create_generator(config=None):
     return hawks_obj
 
 class BaseGenerator:
+    """Base class for the generator, providing a set of common functionality required for all future classes/functionality. Not all attributes are shown here, but those that are not are derived from the config.
+
+    Attributes:
+        config (dict): The full config.
+        any_saving (bool): Whether any of the saving options have been specified. This is automatically determined.
+        multi_config (bool): Whether the config specifies multiple sets of parameters or not. This is automatically determined.
+        stats (:py:class:`~pandas.DataFrame`): A DataFrame that records stats during the runs for easy analysis.
+        datasets (list): A list of datasets (extracted arrays from the :class:`~hawks.genotype.Genotype` s). Created in :func:`~hawks.generator.BaseGenerator.get_best_dataset`.
+        label_sets (list): A list of labels (extracted arrays from the :class:`~hawks.genotype.Genotype` s). Created in :func:`~hawks.generator.BaseGenerator.get_best_dataset`.
+        population (list): An easy reference to the most recent population of individuals.
+        base_folder (:class:`~pathlib.Path`): The path to the root folder for this run of HAWKS. Constructued using the ``folder_name`` in the config. If one isn't given, uses that datetime.
+        config_list (list): A list of the unique configs. Useful for multi_config, where each combination of parameters gets a single config which is stored in this list.
+        best_each_run (list): A list, which contains a sub-list for each config. In this sub-list, the best individual from each run is stored. For single-config runs, flattening may be needed.
+    """
     def __init__(self, config, any_saving, multi_config):
-        # Keep the full config
+        #: Keep the full config
         self.full_config = config
         # Flag for if any saving is occuring
         self.any_saving = any_saving
@@ -158,7 +175,7 @@ class BaseGenerator:
                 raise ValueError(f"{path + [str(key)]} is not a valid argument for the config")
 
     def create_folders(self):
-        """Create the folder(s) necessary for saving. This function is only called if any saving is specified.
+        """Create the folder(s) necessary for saving. This function is only called if any saving option is switched on.
         """
         # Create the base folder
         self._create_base_folder()
@@ -173,13 +190,7 @@ class BaseGenerator:
             if self.folder_name is None:
                 self.folder_name = utils.get_date()
             # Set the path for the base folder
-            # If we're already in an experiments folder, create-subfolder
-            if Path.cwd().name == "hawks_experiments":
-                self.base_folder = Path.cwd() / self.folder_name
-            # Otherwise create a folder for all experiments
-            else:
-                # Set the path for the base folder
-                self.base_folder = Path.cwd() / "hawks_experiments" / self.folder_name
+            self.base_folder = Path.cwd() / self.folder_name
         # Print a warning if the folder exists
         if self.base_folder.is_dir():
             warnings.warn(
@@ -191,10 +202,22 @@ class BaseGenerator:
 
     @staticmethod
     def load_default_config():
+        """Loads the default config JSON file (which is used to fill in any gaps in the provided config).
+        
+        Returns:
+            dict: The full config.
+        """
         default_config = utils.load_json(Path(__file__).parent / "defaults.json")
         return default_config
 
     def save_config(self, config=None, folder=None, filename=None):
+        """Save the config file for future reproduction.
+
+        Args:
+            config (dict, optional): HAWKS config. Defaults to None, where the config is taken from the instance.
+            folder (str, :class:`pathlib.Path`, optional): The folder to save the config in. Defaults to None, where the directory of the config file/experiment script/working directory is used.
+            filename (str, optional): Filename for the config. Defaults to None, where the experiment/folder name from the config is used instead.
+        """
         # Determine location of the config
         # If no folder is given, default to the configs folder
         if folder is None:
@@ -222,13 +245,16 @@ class BaseGenerator:
 
     @staticmethod
     def _check_multiconfig(config):
-        """Check if a list exists in the config i.e. it defines a set of parameters
+        """Check if a list exists in the config i.e. it defines a set of parameters. Switches to multi_config mode if so.
 
-        Arguments:
-            config {dict} -- Config dictionary
+        Args:
+            config (dict): HAWKS config.
 
         Returns:
-            bool -- Whether the config defines a set of parameters
+            bool: ``True`` if a set of parameters is found.
+
+        See Also:
+            :ref:`example_multiconfig` example for further information of usage.
         """
         # Initialize flag
         found_list = False
@@ -246,7 +272,7 @@ class BaseGenerator:
         return found_list
 
     def get_stats(self):
-        """Return the stats (pandas DataFrame), useful in an interactive setting
+        """Return the stats (:py:class:`~pandas.DataFrame`), useful in an interactive setting
         """
         return self.stats
 
@@ -256,13 +282,6 @@ class BaseGenerator:
         return self.full_config
 
     def _get_configs(self, key_paths, param_lists):
-        """
-        I need a function here that, in the non-multi-config case, just returns one thing (self.full_config).
-
-        In the multi_config case, I need it to iteratively return (i.e. yield) each config (where the rough steps needed are outlined below).
-
-        Does the below work at all? Is there a better way?
-        """
         # Check if the config specifies a set or not
         if self.multi_config:
             # Create all the possible combinations for these sets 
@@ -305,6 +324,11 @@ class BaseGenerator:
         return self.seed_num + (num_run * 10)
 
     def set_global_rng(self, num_seed):
+        """Sets the global :py:class:`~numpy.random.mtrand.RandomState` instance for the run, allowing reproducability.
+
+        Args:
+            num_seed (int): The seed used to initialize the RNG.
+        """
         # Create the RandomState instance
         self.global_rng = np.random.RandomState(num_seed)
         # Give access to it from the classes
@@ -312,14 +336,100 @@ class BaseGenerator:
         Dataset.global_rng = self.global_rng
         Genotype.global_rng = self.global_rng
 
+    def _setup(self):
+        # Create a seed if one was not provided
+        if self.seed_num is None:
+            self.seed_num = datetime.now().microsecond
+            self.full_config["hawks"]["seed_num"] = self.seed_num
+        # Create folders if required and save full config
+        if self.any_saving:
+            self.create_folders()
+            # Save the now completed full config
+            if self.save_config_flag:
+                self.save_config(self.full_config, folder=self.base_folder)
+        # Setup a dataframe for storing stats
+        if self.stats is None:
+            self.stats = pd.DataFrame()
+        # Get the number of configs for tqdm (and specifics for multi-config)
+        if self.multi_config:
+            # Count the number of configs to be, and get the changing params
+            total_configs, key_paths, param_lists = self._count_multiconfigs()
+        else:
+            total_configs, key_paths, param_lists = 1, None, None
+        return total_configs, key_paths, param_lists
+
+    def setup_ga(self, dataset_obj, config):
+        # Validate the constraints parameters
+        Genotype.validate_constraints(config["constraints"])
+        # Setup the objective parameters
+        objective_dict = self._setup_objectives(config)
+        # Create the DEAP toolbox and generate the initial population
+        toolbox, initial_pop = ga.main_setup(
+            objective_dict=objective_dict,
+            dataset_obj=dataset_obj,
+            ga_params=config["ga"],
+            constraint_params=config["constraints"]
+        )
+        # Set the DEAP toolbox as an attr
+        self.deap_toolbox = toolbox
+        # Return the objective dict and the initial population
+        return objective_dict, initial_pop
+
     def run(self):
         raise NotImplementedError
 
-    def get_best_dataset(self, return_config, reset):
+    def run_step(self):
         raise NotImplementedError
 
-    @staticmethod
-    def _compare_individuals(indiv1, indiv2):
+    def create_individual(self):
+        """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that. Useful for debugging, to just playing with a single dataset/individual.
+        """
+        if self.multi_config:
+            raise ValueError(f"Not available in multi_config mdoe - Need a single config to generate an individual from")
+        # Create the RandomState instance
+        self.set_global_rng(self.seed_num)
+        # Create the Dataset instance
+        dataset_obj = Dataset(**self.full_config["dataset"])
+        # Setup some attributes for the Cluster class
+        Cluster.setup_variables(dataset_obj, self.full_config["ga"])
+        # Setup the GA
+        objective_dict, pop = self.setup_ga(dataset_obj, self.full_config)
+        # Take from the initial population
+        yield from pop
+
+    def get_best_dataset(self, return_config=False, reset=False):
+        """
+        Function for extracting the data and labels of the best dataset for every run per config.
+
+        A list of the datasets (numpy arrays) and a list of the labels are returned. If specified, a list of the associated configs are also returned.
+
+        Note that these lists are flattened. In the single config case, the list of datasets will be ``num_runs`` long. In the multi_config case, a list of length ``num_runs``*``len(self.config_list)`` will be returned.
+
+        If the datasets or label_sets have not already been extracted then they are extracted. If this needs to be updated, there is a flag to reset this and extract again.
+
+        Args:
+            return_config (bool): Whether the config should be returned.
+            reset (bool): Whether to re-initialize the attributes (useful for when interacting with a run).
+        """
+        # Get the dataset for the best_indiv for each config
+        if self.datasets is None or reset:
+            self.datasets = [indiv.all_values for config_list in self.best_each_run for indiv in config_list]
+        # Same for labels
+        if self.label_sets is None or reset:
+            self.label_sets = [indiv.labels for config_list in self.best_each_run for indiv in config_list]
+        # Return the configs if specified
+        if return_config:
+            return self.datasets, self.label_sets, self.config_list
+        else:
+            return self.datasets, self.label_sets
+
+    def _compare_individuals(self, indiv1, indiv2):
+        raise NotImplementedError
+
+    def _store_results(self, results_dict, pop, num_run, gen, num_rows, objective_dict):
+        raise NotImplementedError
+    
+    def _store_best_indiv(self, results_dict, best_index, num_gens, num_rows):
         raise NotImplementedError
 
     def _plot_save_setup(self):
@@ -332,20 +442,23 @@ class BaseGenerator:
         plot_folder.mkdir(exist_ok=True, parents=True)
         return plot_folder
 
-    def plot_best_indivs(self, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, fig_title=None, nrows=None, ncols=None):
-        """Plot the best individuals from each run, for each config.
+    def plot_best_indivs(self, cmap="inferno", fig_format="pdf", save=False, show=True, remove_axis=False, fig_title=None, nrows=None, ncols=None):
+        """Plot the best individuals from each run, for each config. A separate plot is made for each config, with the best from each run plotted together.
 
-        A separate plot is made for each config, with the best from each run plotted together.
+        Does the processing required to pass onto :func:`~hawks.generator.BaseGenerator.plot_datasets`.
 
-        Keyword Arguments:
-            cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
-            fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
-            save {bool} -- Save the plot. (default: {None})
-            show {bool} -- Show the plot (default: {True})
-            remove_axis {bool} -- Whether to remove the axis to just show the clusters (default: {False})
-            fig_title {str} -- Figure title (default: {None})
-            nrows {int} -- Number of rows for plt.subplots, calculated if None (default: {None})
-            ncols {int} -- Number of columns for plt.subplots, calculated if None (default: {None})
+        Args:
+            cmap (str, optional): The colourmap from matplotlib to use. Defaults to "inferno".
+            fig_format (str, optional): The format to save the plot in, usually either "png" or "pdf". Defaults to "pdf".
+            save (bool, optional): Save the plot. Defaults to False.
+            show (bool, optional): Show the plot. Defaults to True.
+            remove_axis (bool, optional): Whether to remove the axis to just show the clusters. Defaults to False.
+            fig_title (str, optional): Figure title. Defaults to None.
+            nrows (int, optional): Number of rows for plt.subplots, calculated if None. Defaults to None.
+            ncols (int, optional): Number of columns for plt.subplots, calculated if None. Defaults to None.
+
+        Raises:
+            ValueError: If there is no best dataset found. The generator may not have been run yet.
         """
         # Raise error if run premmaturely
         if self.best_each_run is None:
@@ -372,21 +485,19 @@ class BaseGenerator:
             )
 
     def plot_datasets(self, datasets, cmap="inferno", fig_format="png", save=False, show=True, remove_axis=False, filename=None, fig_title=None, nrows=None, ncols=None, folder=None, **kwargs):
-        """Plot the best individuals from each run, for each config.
+        """Plot a set of datasets.
 
-        A separate plot is made for each config, with the best from each run plotted together.
-
-        Keyword Arguments:
-            cmap {str} -- The colourmap from matplotlib to use (default: {"inferno"})
-            datasets {BaseGenerator} -- The individuals/datasets to be plotted
-            fig_format {str} -- The format to save the plot in, usually either "png" or "pdf" (default: {"png"})
-            save {bool} -- Save the plot. (default: {None})
-            show {bool} -- Show the plot (default: {True})
-            remove_axis {bool} -- Whether to remove the axis to just show the clusters (default: {False})
-            filename {str} -- Filename (constructed if None) (default: {None})
-            fig_title {str} -- Figure title (default: {None})
-            nrows {int} -- Number of rows for plt.subplots, calculated if None (default: {None})
-            ncols {int} -- Number of columns for plt.subplots, calculated if None (default: {None})
+        Args:        
+            datasets (list): A list of individuals (:class:`~hawks.genotype.Genotype`) to be plotted.
+            cmap (str): The colourmap from matplotlib to use.  Defaults to "inferno".
+            fig_format (str): The format to save the plot in, usually either "png" or "pdf". Defaults to None.
+            save (bool): Save the plot. Defaults to False.
+            show (bool): Show the plot. Defaults to True.
+            remove_axis (bool): Whether to remove the axis to just show the clusters. Defaults to False.
+            filename (str): Filename (constructed if None). Defaults to None.
+            fig_title (str): Figure title. Defaults to None.
+            nrows (int): Number of rows for plt.subplots, calculated if None. Defaults to None.
+            ncols (int): Number of columns for plt.subplots, calculated if None. Defaults to None.
         """
         # Sort out folders if saving
         if save:
@@ -423,36 +534,23 @@ class BaseGenerator:
         )
 
 class SingleObjective(BaseGenerator):
+    """Class specific for optimizing to a single objective. This is currently the main mode, and is used to optimize the datasets towards as given silhouette width (according the constraints and other parameters).
+    """
     def __init__(self, config, any_saving, multi_config):
         super().__init__(config, any_saving, multi_config)
 
-    def _setup(self):
-        # Create a seed if one was not provided
-        if self.seed_num is None:
-            self.seed_num = datetime.now().microsecond
-            self.full_config["hawks"]["seed_num"] = self.seed_num
-        # Create folders if required and save full config
-        if self.any_saving:
-            self.create_folders()
-            # Save the now completed full config
-            if self.save_config_flag:
-                self.save_config(self.full_config, folder=self.base_folder)
-        # Setup a dataframe for storing stats
-        if self.stats is None:
-            self.stats = pd.DataFrame()
-        # Get the number of configs for tqdm (and specifics for multi-config)
-        if self.multi_config:
-            # Count the number of configs to be, and get the changing params
-            total_configs, key_paths, param_lists = self._count_multiconfigs()
-        else:
-            total_configs, key_paths, param_lists = 1, None, None
-        return total_configs, key_paths, param_lists
-
     def run(self):
+        """The main run function for the generator.
+        """
         for _ in self.run_step():
             pass
 
     def run_step(self):
+        """Run function that contains the actual code, yielding after each run, if desired.
+        
+        Yields:
+            :class:`~hawks.generator.SingleObjective`: The generator instance at the time, allowing inspection of the process.
+        """
         total_configs, key_paths, param_lists = self._setup()
         # Initialize the config_id
         config_id = 0
@@ -485,7 +583,7 @@ class SingleObjective(BaseGenerator):
                 # Setup some attributes for the Cluster class
                 Cluster.setup_variables(dataset_obj, config["ga"])
                 # Setup the GA
-                objective_dict, pop = self.setup_ga(dataset_obj)
+                objective_dict, pop = self.setup_ga(dataset_obj, config)
                 # Store results from the initial population
                 results_dict = self._store_results(
                     results_dict, pop, num_run, 0, num_rows, objective_dict
@@ -541,24 +639,7 @@ class SingleObjective(BaseGenerator):
                         fname=f"config-{config_num}_run-{run_num}_best_data"
                     )
 
-    def setup_ga(self, dataset_obj):
-        # Validate the constraints parameters
-        Genotype.validate_constraints(self.full_config["constraints"])
-        # Setup the objective parameters
-        objective_dict = self._setup_objectives()
-        # Create the DEAP toolbox and generate the initial population
-        toolbox, initial_pop = ga.main_setup(
-            objective_dict=objective_dict,
-            dataset_obj=dataset_obj,
-            ga_params=self.full_config["ga"],
-            constraint_params=self.full_config["constraints"]
-        )
-        # Set the DEAP toolbox as an attr
-        self.deap_toolbox = toolbox
-        # Return the objective dict and the initial population
-        return objective_dict, initial_pop
-
-    def _setup_objectives(self):
+    def _setup_objectives(self, config):
         # Get the currently available/implemented objectives
         avail_objectives = {
             cls.__name__.lower():{'class':cls} for cls in objectives.ClusterIndex.__subclasses__()
@@ -566,7 +647,7 @@ class SingleObjective(BaseGenerator):
         # Create a dict to hold the objectives we select
         objective_dict = {}
         # Loop through the specified objectives
-        for selected_obj in self.full_config["objectives"]:
+        for selected_obj in config["objectives"]:
             selected_obj = selected_obj.lower()
             # Try to find it in the available objectives
             try:
@@ -579,50 +660,12 @@ class SingleObjective(BaseGenerator):
             objective_dict[selected_obj] = avail_objectives[
                 selected_obj]
             # Get the params for the objective(s)
-            obj_args = self.full_config["objectives"][selected_obj]
+            obj_args = config["objectives"][selected_obj]
             # Just for completeness
             objective_dict[selected_obj]["kwargs"] = obj_args
             # Set the kwargs for the class
             objective_dict[selected_obj]['class'].set_kwargs(obj_args)
         return objective_dict
-
-    def create_individual(self):
-        """Hacky function to do the bare minimum needed to create some individuals. The initial population is generated and we yield from that.
-        """
-        if self.multi_config:
-            raise ValueError(f"Not available in multi_config mdoe - Need a single config to generate an individual from")
-        # Create the RandomState instance
-        self.set_global_rng(self.seed_num)
-        # Create the Dataset instance
-        dataset_obj = Dataset(**self.full_config["dataset"])
-        # Setup some attributes for the Cluster class
-        Cluster.setup_variables(dataset_obj, self.full_config["ga"])
-        # Setup the GA
-        objective_dict, pop = self.setup_ga(dataset_obj)
-        # Take from the initial population
-        yield from pop
-
-    def get_best_dataset(self, return_config=False, reset=False):
-        """
-        Function for extracting the data and labels of the best dataset for every run per config.
-
-        A list of the datasets (numpy arrays) and a list of the labels are returned. If specified, a list of the associated configs are also returned.
-
-        Note that these lists are flattened. In the single config case, the list of datasets will be `num_runs` long. In the multi_config case, a list of length `num_runs`*`len(self.config_list)` will be returned.
-
-        If the datasets or label_sets have not already been extracted then they are extracted. If this needs to be updated, there is a flag to reset this and extract again.
-        """
-        # Get the dataset for the best_indiv for each config
-        if self.datasets is None or reset:
-            self.datasets = [indiv.all_values for config_list in self.best_each_run for indiv in config_list]
-        # Same for labels
-        if self.label_sets is None or reset:
-            self.label_sets = [indiv.labels for config_list in self.best_each_run for indiv in config_list]
-        # Return the configs if specified
-        if return_config:
-            return self.datasets, self.label_sets, self.config_list
-        else:
-            return self.datasets, self.label_sets
 
     def _best_in_pop(self, pop):
         if self.comparison == "ranking":
@@ -708,7 +751,16 @@ class SingleObjective(BaseGenerator):
         else:
             return indiv2
 
-    def animate(self, record_stats=False, **kwargs):
+    def animate(self, record_stats=False, plot_pop=True, **kwargs):
+        """Function to animate a run of HAWKS (showing how the datasets evolve). An example of this can be found in the README. Produces a series of PNGs, and creates a gif using `ImageMagick <https://imagemagick.org/index.php>`_.
+        
+        Args:
+            record_stats (bool, optional): Whether the results of the run should be recorded (and therefore can be saved, depending on the config). Defaults to False.
+            plot_pop (bool, optional): Whether to plot the whole population. If False, just plots the best individual. Defaults to True.
+        
+        Raises:
+            ValueError: Animation cannot be run for a multi_config; only a single set of parameters is permitted.
+        """
         # Raise error if multi-config specified
         if self.multi_config:
             raise ValueError(f"Animation is not implemented for multi-config")
@@ -733,18 +785,30 @@ class SingleObjective(BaseGenerator):
             # Setup some attributes for the Cluster class
             Cluster.setup_variables(dataset_obj, self.full_config["ga"])
             # Setup the GA
-            objective_dict, pop = self.setup_ga(dataset_obj)
+            objective_dict, pop = self.setup_ga(dataset_obj, self.full_config)
             # Plot the initial population
-            plotting.plot_pop(
-                pop,
-                fpath=animate_folder / "gen-0",
-                fig_format="png",
-                save=True,
-                remove_axis=True,
-                fig_title="Generation 0",
-                show=False,
-                **kwargs
-            )
+            if plot_pop:
+                plotting.plot_pop(
+                    pop,
+                    fpath=animate_folder / "pop_gen-0",
+                    fig_format="png",
+                    save=True,
+                    remove_axis=True,
+                    fig_title="Generation 0",
+                    show=False,
+                    **kwargs
+                )
+            # Plot the best indiv
+            else:
+                best_indiv, best_index = self._best_in_pop(pop)
+                plotting.plot_indiv(
+                    best_indiv,
+                    fpath=animate_folder / "indiv_gen-0",
+                    remove_axis=True,
+                    save=True,
+                    show=False,
+                    **kwargs
+                )
             if record_stats:
                 # Store results from the initial population
                 results_dict = self._store_results(
@@ -761,16 +825,29 @@ class SingleObjective(BaseGenerator):
                     self.full_config["constraints"],
                     cxpb=self.full_config["ga"]["mate_prob"]
                 )
-                plotting.plot_pop(
-                    pop,
-                    fpath=animate_folder / f"gen-{gen}",
-                    fig_format="png",
-                    save=True,
-                    remove_axis=True,
-                    fig_title=f"Generation {gen}",
-                    show=False,
-                    **kwargs
-                )
+                # Plot the initial population
+                if plot_pop:
+                    plotting.plot_pop(
+                        pop,
+                        fpath=animate_folder / f"gen-{gen}",
+                        fig_format="png",
+                        save=True,
+                        remove_axis=True,
+                        fig_title=f"Generation {gen}",
+                        show=False,
+                        **kwargs
+                    )
+                # Plot the best indiv
+                else:
+                    best_indiv, best_index = self._best_in_pop(pop)
+                    plotting.plot_indiv(
+                        best_indiv,
+                        fpath=animate_folder / f"indiv_gen-{gen}",
+                        remove_axis=True,
+                        save=True,
+                        show=False,
+                        **kwargs
+                    )
                 if record_stats:
                     # Store results from each generation
                     results_dict = self._store_results(
@@ -778,10 +855,17 @@ class SingleObjective(BaseGenerator):
                     )
                 # Keep a reference to the most recent population
                 self.population = pop
-
+        if record_stats:
             self.stats = self.stats.append(
                 pd.DataFrame.from_dict(results_dict), ignore_index=True
             )
+            if self.save_stats:
+                # Save to CSV
+                utils.df_to_csv(
+                    df=self.stats,
+                    path=self.base_folder,
+                    filename="hawks_stats"
+                )
         # Create the gif if convert is available
         which_convert = shutil.which("convert")
         if which_convert is not None:

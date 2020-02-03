@@ -1,17 +1,17 @@
+"""Defines the clustering algorithms and handles running them. Primarily used for analysis and instance space generation.
+"""
 from collections import defaultdict
-import functools
-from datetime import datetime
 from pathlib import Path
 from itertools import zip_longest
 import warnings
 import inspect
-# from inspect import getfullargspec
 
 import numpy as np
 import pandas as pd
 import sklearn.cluster
 import sklearn.mixture
 from sklearn.metrics import adjusted_rand_score
+from scipy.spatial.distance import pdist, squareform
 
 import hawks.utils
 import hawks.problem_features
@@ -19,11 +19,19 @@ import hawks.problem_features
 warnings.filterwarnings(
     action='ignore', category=FutureWarning, module="sklearn"
 )
-# warnings.filterwarnings(
-#     action='ignore', category=FutureWarning, module="pandas"
-# )
 
 def define_cluster_algs(seed):
+    """Defines some default clustering algorithms. Currently uses four simple algorithms: average-linkage, GMM, K-Means++, and single-linkage.
+
+    Args:
+        seed (int): Random seed given to the algorithms. ``int`` is generally fine, but depends on the algorithm implementation.
+
+    Returns:
+        dict: A dict where each key is the name of the algorithm, with ``"class"`` as a callable to create (and fit) the model, any ``"kwargs"`` it needs, and ``"k_multiplier"`` if anything other than the true number of clusters is desired.
+
+    .. todo::
+        Extend functionality for arbitrary clustering algorithms
+    """
     cluster_algs = {
         "Average-Linkage": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
@@ -31,15 +39,15 @@ def define_cluster_algs(seed):
                 "linkage": "average",
                 "n_clusters": None
             },
-            "cluster_multiplier": None
+            "k_multiplier": None
         },
-        "Average-Linkage (Double)": {
+        "Average-Linkage (2K)": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
             "kwargs": {
                 "linkage": "average",
                 "n_clusters": None
             },
-            "cluster_multiplier": 2.0
+            "k_multiplier": 2.0
         },
         "GMM": {
             "class": getattr(sklearn.mixture, "GaussianMixture"),
@@ -48,7 +56,7 @@ def define_cluster_algs(seed):
                 "random_state": seed,
                 "n_init": 3
             },
-            "cluster_multiplier": None
+            "k_multiplier": None
         },
         "K-Means++": {
             "class": getattr(sklearn.cluster, "KMeans"),
@@ -57,7 +65,7 @@ def define_cluster_algs(seed):
                 "random_state": seed,
                 "n_init": 10
             },
-            "cluster_multiplier": None
+            "k_multiplier": None
         },
         "Single-Linkage": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
@@ -65,15 +73,15 @@ def define_cluster_algs(seed):
                 "linkage": "single",
                 "n_clusters": None
             },
-            "cluster_multiplier": None
+            "k_multiplier": None
         },
-        "Single-Linkage (Double)": {
+        "Single-Linkage (2K)": {
             "class": getattr(sklearn.cluster, "AgglomerativeClustering"),
             "kwargs": {
                 "linkage": "single",
                 "n_clusters": None
             },
-            "cluster_multiplier": 2.0
+            "k_multiplier": 2.0
         }
     }
     return cluster_algs
@@ -113,8 +121,32 @@ def setup_folder(save_folder, generator):
     return base_folder
 
 def analyse_datasets(generator=None, datasets=None, label_sets=None, cluster_subset=None, feature_subset=None, seed=None, source="HAWKS", prev_df=None, clustering=True, feature_space=True, save=True, save_folder=None, filename="dataset_analysis"):
+    """Function to analyze the datasets, either by their :py:mod:`~hawks.problem_features`, clustering algorithm performance, or both.
+
+    Args:
+        generator (:class:`~hawks.generator.BaseGenerator`, optional): HAWKS generator instance (that contains datasets). Defaults to None.
+        datasets (list, optional): A list of the datasets to be examined. Defaults to None.
+        label_sets (list, optional): A list of labels that match the list of datasets. Defaults to None.
+        cluster_subset (list, optional): A list of clustering algorithms to use. Defaults to None, where all default clustering algorithms (specified in `:func:~hawks.analysis.define_cluster_algs`) are used.
+        feature_subset (list, optional): A list of problem features to use. Defaults to None, where all problem features (specified in `:mod:~hawks.problem_features`) are used.
+        seed (int, optional): Random seed number. Defaults to None, where it is randomly selected.
+        source (str, optional): Name of the set of datasets. Useful for organizing/analyzing/plotting results. Defaults to "HAWKS".
+        prev_df (:py:class:`~pandas.DataFrame`, optional): Pass in a previous DataFrame, with which the results are added to. Defaults to None, creating a blank DataFrame.
+        clustering (bool, optional): Whether to run clustering algorithms on the datasets or not. Defaults to True.
+        feature_space (bool, optional): Whether to run the problem features on the datasets or not. Defaults to True.
+        save (bool, optional): Whether to save the results or not. Defaults to True.
+        save_folder ([type], optional): Where to save the results. Defaults to None, where the location of the :class:`~hawks.generator.BaseGenerator` is used. If no :class:`~hawks.generator.BaseGenerator` instance was given, create a folder in the working directory. 
+        filename (str, optional): Name of the CSV file to be saved. Defaults to "dataset_analysis".
+
+    Returns:
+        (tuple): 2-element tuple containing:
+
+            :py:class:`~pandas.DataFrame`: DataFrame with results for each dataset.
+
+            :py:class:`pathlib.Path`: The path to the folder where the results are saved.
+    """
     if clustering is False and feature_space is False:
-        raise ValueError(f"At least one of `clustering` or `feature_space` must be selected, otherwise there is nothing to do")
+        raise ValueError("At least one of `clustering` or `feature_space` must be selected, otherwise there is nothing to do")
     # Extract the datasets
     datasets, label_sets, config_nums = extract_datasets(
         generator=generator,
@@ -177,7 +209,7 @@ def analyse_datasets(generator=None, datasets=None, label_sets=None, cluster_sub
     if feature_space and clustering:
         # Need to merge on source and dataset number
         # Use concat to handle when config_num may be undefined (rather than pd.merge)
-        final_df = pd.concat([cluster_df,feature_df], axis=1)
+        final_df = pd.concat([cluster_df, feature_df], axis=1)
         final_df = final_df.loc[:, ~final_df.columns.duplicated()]
     elif feature_space:
         final_df = feature_df
@@ -200,6 +232,19 @@ def analyse_datasets(generator=None, datasets=None, label_sets=None, cluster_sub
     return final_df, base_folder
 
 def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
+    """Function to actually run the clustering algorithms and add results to the DataFrame.
+
+    Args:
+        datasets (list, optional): A list of the datasets to be examined. Defaults to None.
+        label_sets (list, optional): A list of labels that match the list of datasets. Defaults to None.
+        config_nums (list): A list of the config numbers (only relevant for HAWKS, not external datasets). Allows linking of datasets to parameter configuration.
+        alg_dict (dict): Dictionary of the clustering algorithms. Defined in `:func:~hawks.analysis.define_cluster_algs`.
+        df (:py:class:`~pandas.DataFrame`): DataFrame to add the results to.
+        source (str): Name of the set of datasets.
+    
+    Returns:
+        :py:class:`~pandas.DataFrame`: DataFrame with the clustering results.
+    """
     # Loop over the datasets
     for dataset_num, (data, labels, config_num) in enumerate(zip_longest(datasets, label_sets, config_nums)):
         # Create the defaultdict
@@ -214,7 +259,10 @@ def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
         # Loop over the dict of clustering algorithms
         for name, d in alg_dict.items():
             # Add in the number of clusters
-            d["kwargs"] = determine_num_clusters(name, d["kwargs"], d["cluster_multiplier"], labels)
+            d["kwargs"] = determine_num_clusters(name, d["kwargs"], d["k_multiplier"], labels)
+            # Increment the seed to avoid pattern in datasets
+            if "random_state" in d["kwargs"]:
+                d["kwargs"]["random_state"] += 1
             # Pass the kwargs to the relevant algorithm class
             alg = d["class"](**d["kwargs"])
             # Run the algorithm
@@ -243,6 +291,19 @@ def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
     return df
 
 def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, source):
+    """Function to actually run the problem features on the datasets and add results to the DataFrame.
+
+    Args:
+        datasets (list, optional): A list of the datasets to be examined. Defaults to None.
+        label_sets (list, optional): A list of labels that match the list of datasets. Defaults to None.
+        config_nums (list): A list of the config numbers (only relevant for HAWKS, not external datasets). Allows linking of datasets to parameter configuration.
+        feature_dict (dict): Dictionary of the problem features to be used.
+        df (:py:class:`~pandas.DataFrame`): DataFrame to add the results to.
+        source (str): Name of the set of datasets.
+
+    Returns:
+        :py:class:`~pandas.DataFrame`: DataFrame with the clustering results.
+    """
     # Loop over the datasets
     for dataset_num, (data, labels, config_num) in enumerate(zip_longest(datasets, label_sets, config_nums)):
         # Create the defaultdict
@@ -254,9 +315,14 @@ def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, sourc
         # Add some extra general info about the dataset here
         res_dict["num_examples"].append(int(data.shape[0]))
         res_dict["num_clusters"].append(int(np.unique(labels).shape[0]))
+        # Precomputation for problem features (assumes we always use all)
+        precomp_dict = {
+            "dists_sqeuclidean": squareform(pdist(data, metric="sqeuclidean"))
+        }
+        # precomp_dict["dists_euclidean"] = np.sqrt(precomp_dict["dists_sqeuclidean"])
         # Calculate the feature values for this problem/data
         for name, func in feature_dict.items():
-            res_dict[f"f_{name}"].append(func(data, labels))
+            res_dict[f"f_{name}"].append(func(data, labels, precomp_dict))
         # Add to dataframe
         # Not particularly efficient
         df = df.append(
@@ -267,6 +333,20 @@ def run_feature_space(datasets, label_sets, config_nums, feature_dict, df, sourc
     return df
 
 def determine_num_clusters(col_name, alg_kwargs, multiplier, labels):
+    """Function to extract the number of clusters for the dataset (requires labels, this isn't an estimation process).
+
+    Args:
+        col_name (str): Name of the algorithm.
+        alg_kwargs (dict): Arguments for the clustering algorithm.
+        multiplier (float): Multiplier for the number of clusters.
+        labels (list): The labels for this dataset. Can be a list or :py:class:`numpy.ndarray`.
+
+    Raises:
+        KeyError: Incorrect algorithm name given.
+
+    Returns:
+        dict: The algorithm's arguments with the cluster number added.
+    """
     # Fix annoying inconsistency with sklearn arg names
     if col_name == "GMM":
         arg = "n_components"

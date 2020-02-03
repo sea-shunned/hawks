@@ -30,21 +30,6 @@
             "random": {
                 "scale": 1.0,
                 "dims": "each"
-            },
-            "rails": {
-                "scalar_lower": 0.0,
-                "scalar_higher": 1.0
-            },
-            "pso": {
-                "scalar_lower": 0.0,
-                "scalar_higher": 1.0
-            },
-            "pso_informed": {
-                "scalar_lower": 0.0,
-                "scalar_higher": 1.0
-            },
-            "de": {
-                "F": 1.0
             }
         },
         "mut_method_cov": "haar",

@@ -5,6 +5,7 @@
         "n_objectives": 1,
         "num_runs": 2,
         "seed_num": 1,
+        "comparison": "fitness",
         "save_best_data": false,
         "save_stats": false,
         "save_config": false
@@ -29,10 +30,6 @@
             "random": {
                 "scale": 1.0,
                 "dims": "each"
-            },
-            "rails": {
-                "scalar_lower": 0.5,
-                "scalar_higher": 1.0
             }
         },
         "mut_method_cov": "haar",

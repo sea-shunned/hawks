@@ -1,7 +1,6 @@
-"""
-Defines the Objective class, and its subclasses. Anything that will be used in the fitness function should be implemented here as a relevant class.
+"""Defines the Objective class, and its subclasses. Anything that will be used in the fitness function should be implemented here as a relevant class.
 
-Current hierarchy has an intermediate ClusterIndex class. This may be removed in future versions if expansion plans change.
+Class hierarchy is set up for expansions to more objectives that can be selected from.
 """
 import abc
 from itertools import permutations
@@ -11,6 +10,14 @@ from sklearn.metrics import silhouette_score
 from scipy.spatial.distance import pdist, squareform, cdist
 
 class Objective(abc.ABC):
+    """Overall wrapper class for the objectives, defining the mandatory methods.
+
+    Attributes:
+        weight (float): The objective weight, where -1 is minimization and 1 is maximization.
+    """
+    # Objective weight
+    weight = None
+
     def __init__(self):
         pass
 
@@ -18,7 +25,8 @@ class Objective(abc.ABC):
     @staticmethod
     @abc.abstractmethod
     def eval_objective(indiv):
-        """Evaluates the objective on an individual/solution"""
+        """Evaluates the objective on an individual/solution
+        """
 
     @classmethod
     def set_kwargs(cls, kwargs_dict):
@@ -29,21 +37,22 @@ class Objective(abc.ABC):
 
     @classmethod
     def set_objective_attr(cls, indiv, value):
-        """Use setattr with the name of the objective for results saving"""
+        """Use setattr with the name of the objective for results saving
+        """
         setattr(indiv, cls.__name__.lower(), value)
 
-# For compartmentalisation of objectives
-# Can extend for specific functionality when relevant
-# There is method to this madness
 class ClusterIndex(Objective):
+    """For handling shared computation of more cluster indices if that is expanded. There is method to this madness.
+    """
     pass
 
 class Silhouette(ClusterIndex):
-    '''
-    s(i) = (b(i) - a(i)) / max{a(i), b(i)}
-    where a(i) is the average distance between i and all other data in same cluster
-    b(i) is the highest average distance to all points of any other cluster
-    '''
+    """Class to calculate the `silhouette width <https://www.sciencedirect.com/science/article/pii/0377042787901257>`_. See the source code for computation.
+
+    Attributes:
+        target (float): The target value of the silhouette width to optimize the datasets towards.
+        method (str, optional): The method to use for calculating the silhouette width. Either ``"own"`` or ``"sklearn"``. Defaults to "own", which is recommended.
+    """
     # Minimization
     weight = -1.0
     # Use our method, not sklearn (avoids unnecessary compute)
@@ -67,6 +76,7 @@ class Silhouette(ClusterIndex):
 
     @staticmethod
     def calc_intraclusts(indiv, clust_list):
+        # Calculate the intracluster variance
         for i in clust_list:
             start, stop = indiv.positions[i]
             # Calculate the numerator values
@@ -78,15 +88,15 @@ class Silhouette(ClusterIndex):
 
     @staticmethod
     def calc_interclusts(indiv):
+        # Calculate the intercluster variance
         # Need to recalc everything for the b(i) term
         combs = permutations(range(len(indiv.positions)), 2)
         indiv.b_vals = np.full((indiv.distances.shape[0], ), np.inf)
-
         for clust_num1, clust_num2 in combs:
             c1_start, c1_stop = indiv.positions[clust_num1]
             c2_start, c2_stop = indiv.positions[clust_num2]
             clust_array = indiv.distances[c1_start:c1_stop, c2_start:c2_stop]
-
+            # Get the minimum average distance
             indiv.b_vals[c1_start:c1_stop] = np.minimum(
                 np.mean(clust_array, axis=1), indiv.b_vals[c1_start:c1_stop])
 
@@ -106,6 +116,7 @@ class Silhouette(ClusterIndex):
 
     @staticmethod
     def calc_silh(indiv):
+        # Calculate the silhouette width 
         top_term = indiv.b_vals - indiv.a_vals
         bottom_term = np.maximum(indiv.b_vals, indiv.a_vals)
         res = top_term / bottom_term
@@ -115,13 +126,15 @@ class Silhouette(ClusterIndex):
 
     @staticmethod
     def eval_objective(indiv):
+        # Required function to evaluate the silhouette width objective
+        # Option to use the sklearn version
         if Silhouette.method == "sklearn":
             return silhouette_score(
                 indiv.all_values,
                 indiv.labels,
                 metric="sqeuclidean")
         else:
-            ### Can add hooks for metric here if we want it to be dynamic
+            # *TODO*: Add hooks for metric here if we want it to be dynamic
             # Check if any recomputation is needed
             for cluster in indiv:
                 if cluster.changed:
@@ -159,23 +172,3 @@ class Silhouette(ClusterIndex):
             Silhouette.set_objective_attr(indiv, silh_width)
             # Return the distance to the target
             return np.abs(Silhouette.target - silh_width)
-
-# class ClusterAlg(Objective):
-#     scoring_method = None
-#     scoring_func = None
-
-#     def __init__(self):
-#         super(ClusterAlg, self).__init__(self)
-
-#     @classmethod
-#     def get_score_func(cls):
-#         pass
-
-#     @staticmethod
-#     def eval_objective(indiv):
-        
-#         alg = None
-
-#         pred = alg.fit(indiv.data)
-
-#         return ClusterAlg.scoring_func(pred, indiv.labels)

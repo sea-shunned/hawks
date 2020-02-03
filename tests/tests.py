@@ -1,7 +1,12 @@
 import unittest
+from pathlib import Path
+import sys
+
 import numpy as np
 from sklearn.metrics import silhouette_score
 import pandas as pd
+
+# sys.path.append(Path.joinpath(Path(__file__).parent, "../hawks/"))
 
 import hawks
 from hawks.cluster import Cluster
@@ -303,18 +308,20 @@ class ConstraintTests(unittest.TestCase):
 
         clust2 = Cluster(80)
         clust2.mean = np.array([0, 0])
-        clust2.cov = np.array([[9.9, 0], [0, 1]])
+        clust2.cov = np.array([[5, 0], [0, 1]])
 
         indiv = Genotype([clust1, clust2])
-        eigen_ratio = hawks.constraints.eigenval_ratio(indiv)        
-
+        eigen_ratio = hawks.constraints.eigenval_ratio(indiv)
+        print(hawks)
         self.assertEqual(eigen_ratio, 10)
 
 class EvolutionaryTests(unittest.TestCase):
     # **TODO** Some tests for different selection methods
 
     def setUp(self):
-        self.gen = hawks.create_generator("validation.json")
+        self.gen = hawks.create_generator(
+            Path(hawks.__file__).parents[1] / "tests" / "validation.json"
+        )
         self.init_pop = []
         for indiv in self.gen.create_individual():
             self.init_pop.append(indiv)
@@ -557,13 +564,14 @@ class HawksTests(unittest.TestCase):
         self.assertEqual(total_configs, 48)
 
     def test_full_hawks_run(self):
-        gen = hawks.create_generator("validation.json")
+        test_fpath = Path(hawks.__file__).parents[1] / "tests"
+        gen = hawks.create_generator(test_fpath / "validation.json")
         gen.run()
 
         res = gen.get_stats()
 
         known_result = pd.read_csv(
-            "validation.csv",
+            test_fpath / "validation.csv",
             index_col=False
         )
         print("Result:")
@@ -576,16 +584,17 @@ class HawksTests(unittest.TestCase):
         self.assertTrue(equals)
 
     def test_full_hawks_run_multiple(self):
-        gen = hawks.create_generator("validation.json")
+        test_fpath = Path(hawks.__file__).parents[1] / "tests"
+        gen = hawks.create_generator(test_fpath / "validation.json")
         gen.run()
         # Run a second time to ensure there's no carryover
-        gen = hawks.create_generator("validation.json")
+        gen = hawks.create_generator(test_fpath / "validation.json")
         gen.run()
 
         res = gen.get_stats()
 
         known_result = pd.read_csv(
-            "validation.csv",
+            test_fpath / "validation.csv",
             index_col=False
         )
         # Pandas can be iffy with data types
