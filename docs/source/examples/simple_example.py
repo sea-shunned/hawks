@@ -1,4 +1,4 @@
-"""Single HAWKS run 
+"""Single, simple HAWKS run, with KMeans applied to the best dataset
 """
 import numpy as np
 from sklearn.cluster import KMeans
