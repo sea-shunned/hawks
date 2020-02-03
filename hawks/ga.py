@@ -1,16 +1,30 @@
-"""
-Handles everything related to the GA itself. This is mainly setting up DEAP, processing the GA-specific arguments, and defining all the relevant aspects of the evolution (such as the parental selection, environmental selection etc.).
+"""Handles everything related to the GA itself. This is mainly setting up DEAP, processing the GA-specific arguments, and defining all the relevant aspects of the evolution (such as the parental selection, environmental selection etc.).
 """
 from functools import partial
-import operator
 
 import numpy as np
 from deap import base, creator, tools
 
+import hawks.utils as utils
 from hawks.genotype import Genotype
 from hawks.cluster import Cluster
 
 def main_setup(objective_dict, dataset_obj, ga_params, constraint_params):
+    """Central function to setup DEAP and the GA.
+    
+    Args:
+        objective_dict (dict): Dictionary with the objective function and its arguments.
+        dataset_obj (:class:`~hawks.dataset.Dataset`): Dataset instance for this run.
+        ga_params (dict): GA parameters from the config.
+        constraint_params (dict): Constraint parameters from the config.
+    
+    Returns:
+        tuple: 2-element tuple containing:
+
+            :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+
+            list: The initialized population.
+    """
     # Create the DEAP toolbox
     toolbox = deap_setup(objective_dict, dataset_obj, ga_params)
     # Create the initial population, setup objectives, constraints etc.
@@ -18,6 +32,16 @@ def main_setup(objective_dict, dataset_obj, ga_params, constraint_params):
     return toolbox, pop
 
 def deap_setup(objective_dict, dataset_obj, ga_params):
+    """Setup the DEAP toolbox.
+
+    Args:
+        objective_dict (dict): Dictionary with the objective function and its arguments.
+        dataset_obj (:class:`~hawks.dataset.Dataset`): Dataset instance for this run.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
     # Set up the weights for the optimisation
     weights = []
     for objective in objective_dict.values():
@@ -33,6 +57,16 @@ def deap_setup(objective_dict, dataset_obj, ga_params):
     return toolbox
 
 def create_toolbox(objective_dict, dataset_obj, ga_params):
+    """Function to create the toolbox, calling the relevant selection functions based on the parameters.
+
+    Args:
+        objective_dict (dict): Dictionary with the objective function and its arguments.
+        dataset_obj (:class:`~hawks.dataset.Dataset`): Dataset instance for this run.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
     # Instantiate toolbox
     toolbox = base.Toolbox()
     # Register the individual
@@ -47,38 +81,52 @@ def create_toolbox(objective_dict, dataset_obj, ga_params):
     toolbox = select_mutation(toolbox, dataset_obj, ga_params)
     # Select the crossover function
     toolbox = select_crossover(toolbox, ga_params)
+    # Select the parental selection function
+    toolbox = select_parent_func(toolbox, ga_params)
+    # Select the environmental selection function
+    toolbox = select_environ_func(toolbox, ga_params)
     # Register the evaluation function
     toolbox.register("evaluate", evaluate_indiv, objective_dict=objective_dict)
-    # Register parental selection
-    toolbox.register(
-        "parent_selection", parental_selection,
-        offspring_size=ga_params["num_indivs"]
-    )
-    # Register environmental selection
-    toolbox.register(
-        "environment_selection", stochastic_ranking,
-        ga_params=ga_params
-    )
     return toolbox
 
 def select_mutation(toolbox, dataset_obj, ga_params):
+    """Function to select the mutation operator. New operators (added to :class:`~hawks.cluster.Cluster`) need to be specified here to be reachable. Current options (given in the config) are:
+
+    - "random"
+
+    Args:
+        toolbox (:py:class:`~deap.base.Toolbox`): DEAP toolbox.
+        dataset_obj (:class:`~hawks.dataset.Dataset`): Dataset instance for this run.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
+    # Local references for cleanliness
+    # Mean
+    mean_method = ga_params["mut_method_mean"]
+    mean_args = ga_params["mut_args_mean"][mean_method]
+    # Covariance
+    cov_method = ga_params["mut_method_cov"]
+    cov_args = ga_params["mut_args_cov"][cov_method]
     # Select the appropriate mean mutation function
     if ga_params["mut_method_mean"] == "random":
         mut_mean_func = Cluster.mutate_mean_random
-    elif ga_params["mut_method_mean"] == "pso":
-        # **TODO**
-        raise NotImplementedError
     else:
         raise ValueError(f"{ga_params['mut_method_mean']} is not a valid method to mutate the mean")
     # Create a partial function with the mean function and it's given arguments
-    mut_mean_func = partial(mut_mean_func, **ga_params["mut_args_mean"])
+    mut_mean_func = partial(
+        mut_mean_func, **mean_args
+    )
     # Select the appropriate covariance mutation function
-    if ga_params["mut_method_cov"] == "haar":
+    if cov_method == "haar":
         mut_cov_func = Cluster.mutate_cov_haar
     else:
-        raise ValueError(f"{ga_params['mut_method_cov']} is not a valid method to mutate the covariance")
+        raise ValueError(f"{cov_method} is not a valid method to mutate the covariance")
     # Create a partial function with the covariance function and it's given arguments
-    mut_cov_func = partial(mut_cov_func, **ga_params["mut_args_cov"])
+    mut_cov_func = partial(
+        mut_cov_func, **cov_args
+    )
     # Register the mutation function
     toolbox.register(
         "mutate",
@@ -107,6 +155,18 @@ def select_mutation(toolbox, dataset_obj, ga_params):
     return toolbox
 
 def select_crossover(toolbox, ga_params):
+    """Function to select the crossover operator. New operators (added to :class:`~hawks.genotype.Genotype`) need to be specified here to be reachable. Current options (given in the config) are:
+
+    - "cluster" (swap mean and covariance together)
+    - "dv" (swap mean and covariance independently)
+
+    Args:
+        toolbox (:py:class:`~deap.base.Toolbox`): DEAP toolbox.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
     # Set up crossover/mate operator
     if ga_params["mate_scheme"] == "cluster":
         mate_func = Genotype.xover_cluster
@@ -115,8 +175,62 @@ def select_crossover(toolbox, ga_params):
     else:
         raise ValueError(f'{ga_params["mate_scheme"]} is not a valid mutation scheme')
     # Register crossover
+    toolbox.register("mate", mate_func)
+    return toolbox
+
+def select_parent_func(toolbox, ga_params):
+    """Function to select the parental selection method. New methods (added in this module) need to be specified here to be reachable. Current options (given in the config) are:
+
+    - "binary" or "tournament" (ranking-based tournament selection)
+    - "tournament-fitness" (fitness-based tournament selection)
+
+    Args:
+        toolbox (:py:class:`~deap.base.Toolbox`): DEAP toolbox.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
+    # Remove unwanted characters
+    sel_method = utils.translate_method(ga_params["parent_selection"])
+    # Use our modified binary tournament
+    if sel_method == "binary" or sel_method == "binarytournament" or sel_method == "tournament":
+        sel_func = binary_tournament
+    # Use original binary tournament
+    elif sel_method == "tournamentfitness":
+        sel_func = binary_tournament_fitness
+    # Register parental selection
     toolbox.register(
-        "mate", mate_func, cxpb=ga_params["mate_prob"])
+        "parent_selection",
+        sel_func,
+        offspring_size=ga_params["num_indivs"]
+    )
+    return toolbox
+
+def select_environ_func(toolbox, ga_params):
+    """Function to select the environmental selection method. New methods (added in this module) need to be specified here to be reachable. Current options (given in the config) are:
+
+    - "sr" or "stochastic ranking" (stochastic ranking)
+
+    Args:
+        toolbox (:py:class:`~deap.base.Toolbox`): DEAP toolbox.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        :py:class:`~deap.base.Toolbox`: DEAP toolbox.
+    """
+    # Remove unwanted characters
+    sel_method = utils.translate_method(ga_params["environ_selection"])
+    if sel_method == "sr" or sel_method == "stochasticranking":
+        sel_func = stochastic_ranking
+    else:
+        raise ValueError(f"{sel_method} is not a recognized option for environmental selection")
+    # Register environmental selection
+    toolbox.register(
+        "environment_selection",
+        sel_func,
+        ga_params=ga_params
+    )
     return toolbox
 
 def generate_indiv(icls, dataset_obj):
@@ -154,6 +268,15 @@ def initialize_ga(toolbox, ga_params, objective_dict, constraint_params):
     return pop
 
 def evaluate_indiv(indiv, objective_dict):
+    """Wrapper function for calculating the individual's fitness. See :class:`~hawks.objective.Objective` for implementation details.
+
+    Args:
+        indiv (:class:`~hawks.genotype.Genotype`): A single individual (i.e. a dataset).
+        objective_dict (dict): Dictionary with the objective function and its arguments.
+
+    Returns:
+        tuple: Objective/fitness values.
+    """
     obj_values = []
     # Loop over the objectives
     for objective in objective_dict.values():
@@ -164,29 +287,61 @@ def evaluate_indiv(indiv, objective_dict):
     return tuple(obj_values)
 
 def reset_changed_flags(indiv):
-    # Set all flags to false to enable future partial recomp
+    # Set all flags to false to enable future partial recomputation
     for cluster in indiv:
         cluster.changed = False
 
-def parental_selection(pop, offspring_size):    
+def binary_tournament(pop, offspring_size):
+    # Binary tournament function based on the ranking
+    parents = []
+    # Just in case offspring size is different to popsize
+    length = len(pop)
+    # Run a tournament to get a parent the needed number of times
+    for _ in range(offspring_size):
+        # Take the minimum as the pop is sorted in ranking order
+        winner = np.min(Genotype.global_rng.randint(length, size=2))
+        # Add the parent to the list
+        parents.append(pop[winner])
+    # Duplicate if we have a pop size of 1
+    if not parents:
+        parents = [pop[0], pop[0]]
+    return parents
+
+def binary_tournament_fitness(pop, offspring_size):
+    # Binary tournament function based on the fitness
     parents = []
     # Just in case offspring size is different to popsize
     length = len(pop)
     # Create a list of tuples, each with 2 parents in
-    for _ in range(int(offspring_size/2)):
-        # Take the minimum as the pop is sorted in ranking order
-        index1 = np.min(Genotype.global_rng.randint(length, size=2))
-        index2 = np.min(Genotype.global_rng.randint(length, size=2))
-        # Add this pair to the parent list
-        parents.append(
-            (pop[index1], pop[index2])
-        )
+    for _ in range(offspring_size):
+        # Get two random indices
+        ind1, ind2 = Genotype.global_rng.randint(length, size=2)
+        # See if the 1st index is better
+        if pop[ind1].fitness.wvalues > pop[ind2].fitness.wvalues:
+            winner = ind1
+        # See if the 2nd index is better
+        elif pop[ind2].fitness.wvalues > pop[ind1].fitness.wvalues:
+            winner = ind2
+        # If they are equal, just pick one
+        else:
+            winner = ind1
+        # Add the parent to the list
+        parents.append(pop[winner])
     # Duplicate if we have a pop size of 1
     if not parents:
         parents = [(pop[0], pop[0])]
     return parents
 
 def stochastic_ranking(pop, ga_params):
+    """Implementation of the `stochastic ranking <https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=873238>`_.
+
+    Args:
+        pop (list): The population of individuals.
+        ga_params (dict): GA parameters from the config.
+
+    Returns:
+        list: Sorted population
+    """
     # Avoid lookups for things in loop
     prob_fitness = ga_params["prob_fitness"]
     # Loop over each individual
@@ -217,19 +372,35 @@ def stochastic_ranking(pop, ga_params):
             break
     # Calculate how many of the best inidividuals to keep
     num_elites = int(ga_params["num_indivs"] * ga_params["elites"])
-    # Return the appropriate number of individuals
-    if len(pop) > num_elites:
-        # Select the elites, then select the rest randomly from the remainder
-        pop = pop[:num_elites] + [
-            pop[num_elites:][i] for i in Genotype.global_rng.choice(
-                len(pop[num_elites:]),
-                size=ga_params["num_indivs"] - num_elites,
-                replace=False
-                )
-            ]
+    # If no elitism, take the first lambda ranked individuals
+    if num_elites == 0:
+        pop = pop[:ga_params["num_indivs"]]
+    # Otherwise use the elitism
+    else:
+        # Return the appropriate number of individuals
+        if len(pop) > num_elites:
+            # Select the elites, then select the rest randomly from the remainder
+            pop = pop[:num_elites] + [
+                pop[num_elites:][i] for i in Genotype.global_rng.choice(
+                    len(pop[num_elites:]),
+                    size=ga_params["num_indivs"] - num_elites,
+                    replace=False
+                    )
+                ]
     return pop
 
-def generation(pop, toolbox, constraint_params):
+def generation(pop, toolbox, constraint_params, cxpb):
+    """Function to execute each generation. The order and different elements are modified here, the actual nature of the components is dependent on what is in the toolbox.
+
+    Args:
+        pop (list): The population of individuals.
+        toolbox (:py:class:`~deap.base.Toolbox`): DEAP toolbox.
+        constraint_params (dict): Constraint parameters from the config.
+        cxpb (float): Crossover probability.
+
+    Returns:
+        list: The population after this generation.
+    """
     # Clone population for offspring
     offspring = [toolbox.clone(ind) for ind in pop]
     # Reconstruct the array views lost by cloning
@@ -237,15 +408,19 @@ def generation(pop, toolbox, constraint_params):
         indiv.recreate_views()
     # Select the parents
     offspring = toolbox.parent_selection(offspring)
-    # Create offspring - this happens in place so the parents actually become the children (hence the cloning)
-    for parent1, parent2 in offspring:
-        # Crossover
-        toolbox.mate(parent1, parent2)
-        # Mutation
-        toolbox.mutate(parent1)
-        toolbox.mutate(parent2)
-    # Flatten the list of tuples
-    offspring = [parent for tup in offspring for parent in tup]
+    # Create offspring
+    # Occurs in place so the parents become the children (hence the cloning)
+    # No crossover for single individual
+    if len(offspring) == 1:
+        toolbox.mutate(offspring[0])
+    else:
+        for parent1, parent2 in zip(offspring[::2], offspring[1::2]):
+            if Genotype.global_rng.rand() < cxpb:
+                # Crossover
+                toolbox.mate(parent1, parent2)
+            # Mutation
+            toolbox.mutate(parent1)
+            toolbox.mutate(parent2)
     # Resample the values
     for indiv in offspring:
         indiv.resample_values()

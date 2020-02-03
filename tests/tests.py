@@ -1,9 +1,13 @@
 import unittest
+from pathlib import Path
 import sys
+
 import numpy as np
 from sklearn.metrics import silhouette_score
 import pandas as pd
-sys.path.append('..')
+
+# sys.path.append(Path.joinpath(Path(__file__).parent, "../hawks/"))
+
 import hawks
 from hawks.cluster import Cluster
 from hawks.dataset import Dataset
@@ -17,6 +21,8 @@ class OperatorTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
         clust1 = Cluster(70)
         clust1.mean = np.array([0, 0])
@@ -37,18 +43,77 @@ class OperatorTests(unittest.TestCase):
         self.indiv2 = Genotype([clust3, clust4])
         self.indiv2.create_views()
         self.indiv2.resample_values()
-    
+
     def tearDown(self):
         Cluster.global_rng = None
         Genotype.global_rng = None
 
         delattr(Cluster, "num_dims")
 
+    def test_uniform_crossover_genes(self):
+        # Get the sequence of the numbers to be generated
+        rng = np.random.RandomState(42)
+        swaps = [True if rng.rand() < 0.5 else False for _ in range(len(self.indiv1)*2)]
+
+        indiv1_means = [i.mean for i in self.indiv1]
+        indiv2_means = [i.mean for i in self.indiv2]
+
+        indiv1_covs = [i.cov for i in self.indiv1]
+        indiv2_covs = [i.cov for i in self.indiv2]
+
+        Genotype.global_rng = np.random.RandomState(42)
+        self.indiv1, self.indiv2 = Genotype.xover_genes(
+            self.indiv1,
+            self.indiv2,
+            mixing_ratio=0.5
+        )
+
+        # Test means
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps[0::2])):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertTrue(np.array_equal(clust1.mean, indiv2_means[i]))
+                    self.assertTrue(np.array_equal(clust2.mean, indiv1_means[i]))
+                else:
+                    self.assertTrue(np.array_equal(clust1.mean, indiv1_means[i]))
+                    self.assertTrue(np.array_equal(clust2.mean, indiv2_means[i]))
+        # Test covs
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps[1::3])):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertTrue(np.array_equal(clust1.cov, indiv2_covs[i]))
+                    self.assertTrue(np.array_equal(clust2.cov, indiv1_covs[i]))
+                else:
+                    self.assertTrue(np.array_equal(clust1.cov, indiv1_covs[i]))
+                    self.assertTrue(np.array_equal(clust2.cov, indiv2_covs[i]))
+
+    def test_uniform_crossover_clusters(self):
+        rng = np.random.RandomState(42)
+        swaps = [True if rng.rand() < 0.5 else False for _ in self.indiv1]
+
+        indiv1_ids = [id(i) for i in self.indiv1]
+        indiv2_ids = [id(i) for i in self.indiv2]
+
+        Genotype.global_rng = np.random.RandomState(42)
+        self.indiv1, self.indiv2 = Genotype.xover_cluster(
+            self.indiv1,
+            self.indiv2
+        )
+        # Test whether cluster objects have been swapped or not
+        for i, (clust1, clust2, swap) in enumerate(zip(self.indiv1, self.indiv2, swaps)):
+            with self.subTest(i=i):
+                if swap:
+                    self.assertEqual(indiv1_ids[i], id(clust2))
+                    self.assertEqual(indiv2_ids[i], id(clust1))
+                else:
+                    self.assertEqual(indiv1_ids[i], id(clust1))
+                    self.assertEqual(indiv2_ids[i], id(clust2))
+
     def test_uniform_crossover_none(self):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=0
+            mixing_ratio=0.0
         )
 
         indiv1_unchanged = all([
@@ -71,12 +136,12 @@ class OperatorTests(unittest.TestCase):
         ])
 
         self.assertTrue(indiv1_unchanged)
-    
+
     def test_uniform_crossover_all(self):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=1
+            mixing_ratio=1.0
         )
 
         indiv1_allchanged = not any([
@@ -108,6 +173,8 @@ class GenotypeTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
         clust1 = Cluster(50)
         clust1.mean = np.array([0, 0])
@@ -128,7 +195,7 @@ class GenotypeTests(unittest.TestCase):
         self.indiv2 = Genotype([clust3, clust4])
         self.indiv2.create_views()
         self.indiv2.resample_values()
-    
+
     def tearDown(self):
         Cluster.global_rng = None
         Genotype.global_rng = None
@@ -141,8 +208,8 @@ class GenotypeTests(unittest.TestCase):
         self.indiv1, self.indiv2 = Genotype.xover_genes(
             self.indiv1,
             self.indiv2,
-            cxpb=1
-        )   
+            mixing_ratio=1.0
+        )
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -157,8 +224,8 @@ class GenotypeTests(unittest.TestCase):
         self.indiv1, self.indiv2 = Genotype.xover_cluster(
             self.indiv1,
             self.indiv2,
-            cxpb=1
-        )    
+            mixing_ratio=1.0
+        )
 
         self.indiv1.recreate_views()
         self.indiv1.resample_values()
@@ -176,6 +243,8 @@ class ConstraintTests(unittest.TestCase):
         Genotype.global_rng = rng
 
         setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
 
     @classmethod
     def tearDownClass(cls):
@@ -239,18 +308,20 @@ class ConstraintTests(unittest.TestCase):
 
         clust2 = Cluster(80)
         clust2.mean = np.array([0, 0])
-        clust2.cov = np.array([[9.9, 0], [0, 1]])
+        clust2.cov = np.array([[5, 0], [0, 1]])
 
         indiv = Genotype([clust1, clust2])
-        eigen_ratio = hawks.constraints.eigenval_ratio(indiv)        
-
+        eigen_ratio = hawks.constraints.eigenval_ratio(indiv)
+        print(hawks)
         self.assertEqual(eigen_ratio, 10)
 
 class EvolutionaryTests(unittest.TestCase):
     # **TODO** Some tests for different selection methods
 
     def setUp(self):
-        self.gen = hawks.create_generator("validation.json")
+        self.gen = hawks.create_generator(
+            Path(hawks.__file__).parents[1] / "tests" / "validation.json"
+        )
         self.init_pop = []
         for indiv in self.gen.create_individual():
             self.init_pop.append(indiv)
@@ -259,7 +330,7 @@ class EvolutionaryTests(unittest.TestCase):
         del self.gen
 
     def test_overlap_consistent(self):
-        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"])
+        pop = hawks.ga.generation(self.init_pop, self.gen.deap_toolbox, self.gen.full_config["constraints"], cxpb=0.7)
 
         overlaps_before = np.sum([indiv.constraints["overlap"] for indiv in pop])
         for indiv in pop:
@@ -267,6 +338,60 @@ class EvolutionaryTests(unittest.TestCase):
         overlaps_after = np.sum([indiv.constraints["overlap"] for indiv in pop])
         self.assertAlmostEqual(overlaps_before, overlaps_after)
 
+    # def test_tournament_selection(self):
+    #     parents = hawks.ga.binary_tournament(
+    #         self.init_pop,
+    #         offspring_size=len(self.init_pop)
+    #     )
+
+    def test_stochastic_ranking_fitness(self):
+        pop = []
+        for i, fit in enumerate(range(len(self.init_pop), 0, -1)):
+            indiv = self.init_pop[i]
+            indiv.fitness.values = (fit,)
+            setattr(indiv, "ind", i)
+            pop.append(indiv)
+
+        new_pop = hawks.ga.stochastic_ranking(
+            pop,
+            ga_params={
+                "prob_fitness": 1,
+                "num_indivs": len(self.init_pop),
+                "elites": 0
+            }
+        )
+        fit_aux = -1
+
+        for i, indiv in enumerate(new_pop):
+            with self.subTest(i=i):
+                self.assertGreater(indiv.fitness.values[0], fit_aux)
+            fit_aux = indiv.fitness.values[0]
+
+    def test_stochastic_ranking_constraints(self):
+        pop = []
+        for i, pen in enumerate(range(len(self.init_pop), 0, -1)):
+            indiv = self.init_pop[i]
+            indiv.penalty = pen
+            setattr(indiv, "ind", i)
+            pop.append(indiv)
+
+        new_pop = hawks.ga.stochastic_ranking(
+            pop,
+            ga_params={
+                "prob_fitness": 0,
+                "num_indivs": len(self.init_pop),
+                "elites": 0
+            }
+        )
+
+        pen_aux = -1
+
+        for i, indiv in enumerate(new_pop):
+            with self.subTest(i=i):
+                self.assertLess(pen_aux, indiv.penalty)
+            pen_aux = indiv.penalty
+
+        
 class DatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -331,7 +456,7 @@ class DatasetTests(unittest.TestCase):
         obj = Dataset(**kwargs)
 
         self.assertLessEqual(obj.min_clust_size, obj.num_examples/obj.num_clusters)
-    
+
     def test_exact_min_clust_size(self):
         kwargs = self.args.copy()
         kwargs["num_examples"] = 200
@@ -350,6 +475,9 @@ class ObjectiveTests(unittest.TestCase):
         Genotype.global_rng = rng
         Cluster.global_rng = rng
         sizes = [190, 20, 30, 110]
+        setattr(Cluster, "num_dims", 2)
+        setattr(Cluster, "initial_mean_upper", 1.0)
+        setattr(Cluster, "initial_cov_upper", 0.5)
         self.indiv = Genotype([Cluster(size) for size in sizes])
         self.indiv.create_views()
         self.indiv.resample_values()
@@ -425,7 +553,9 @@ class HawksTests(unittest.TestCase):
             "ga": {
                 "num_gens": [50, 100, 10, 200],
                 "mut_args_mean": {
-                    "dims": ["each", "all"]
+                    "random": {
+                        "dims": ["each", "all"]
+                    }
                 }
             }
         }
@@ -434,13 +564,37 @@ class HawksTests(unittest.TestCase):
         self.assertEqual(total_configs, 48)
 
     def test_full_hawks_run(self):
-        gen = hawks.create_generator("validation.json")
+        test_fpath = Path(hawks.__file__).parents[1] / "tests"
+        gen = hawks.create_generator(test_fpath / "validation.json")
         gen.run()
 
         res = gen.get_stats()
 
         known_result = pd.read_csv(
-            "validation.csv",
+            test_fpath / "validation.csv",
+            index_col=False
+        )
+        print("Result:")
+        print(res)
+        print("Known result:")
+        print(known_result)
+        print("---")
+        # Pandas can be iffy with data types
+        equals = np.allclose(res.values, known_result.values)
+        self.assertTrue(equals)
+
+    def test_full_hawks_run_multiple(self):
+        test_fpath = Path(hawks.__file__).parents[1] / "tests"
+        gen = hawks.create_generator(test_fpath / "validation.json")
+        gen.run()
+        # Run a second time to ensure there's no carryover
+        gen = hawks.create_generator(test_fpath / "validation.json")
+        gen.run()
+
+        res = gen.get_stats()
+
+        known_result = pd.read_csv(
+            test_fpath / "validation.csv",
             index_col=False
         )
         print(res)
@@ -505,4 +659,3 @@ class HawksTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(buffer=True)
-    

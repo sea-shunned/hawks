@@ -5,10 +5,10 @@
         "n_objectives": 1,
         "num_runs": 1,
         "seed_num": null,
+        "comparison": "fitness",
         "save_best_data": false,
         "save_stats": false,
-        "plot_best": false,
-        "save_plot": false
+        "save_config": false
     },
     "objectives": {
         "silhouette": {
@@ -27,19 +27,27 @@
         "num_indivs": 10,
         "mut_method_mean": "random",
         "mut_args_mean": {
-            "scale": 1.0,
-            "dims": "each"
+            "random": {
+                "scale": 1.0,
+                "dims": "each"
+            }
         },
         "mut_method_cov": "haar",
         "mut_args_cov": {
-            "power": 0.3
+            "haar": {
+                "power": 0.3
+            }
         },
         "mut_prob_mean": "length",
         "mut_prob_cov": "length",
         "mate_scheme": "dv",
         "mate_prob": 0.7,
         "prob_fitness": 0.5,
-        "elites": 0.2
+        "elites": 0,
+        "initial_mean_upper": 1.0,
+        "initial_cov_upper": 0.5,
+        "environ_selection": "sr",
+        "parent_selection": "tournament"
     },
     "constraints": {
         "overlap": {

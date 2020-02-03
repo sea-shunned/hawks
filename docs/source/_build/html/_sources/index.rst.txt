@@ -1,0 +1,35 @@
+.. HAWKS documentation master file, created by
+   sphinx-quickstart on Mon Jan 20 12:17:54 2020.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to HAWKS's documentation!
+=================================
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+Repository at `github.com/sea-shunned/hawks <https://github.com/sea-shunned/hawks>`_.
+
+Summary
+=======
+
+.. include:: ../../README.rst
+  :start-after: summary-marker-start
+  :end-before: summary-marker-end
+
+Quick Links
+=====================================
+
+* :ref:`Introduction<intro_page>`
+* :ref:`Examples<examples_page>`
+* :ref:`Parameters<param_page>`
+* :ref:`Plotting<plot_page>`
+* :ref:`Running experiments<experiment_page>`
+* :ref:`Changelog<changelog_page>`
+* :ref:`Extending/contributing<contrib_page>`
+
+.. include:: ../../README.rst
+  :start-after: installation-marker-start
+  :end-before: installation-marker-end

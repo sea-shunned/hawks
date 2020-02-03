@@ -1,13 +1,22 @@
-"""
-Defines the Dataset class, which handles general properties of the dataset that is being evolved (and is consistent across individuals in the population).
-
-Previously incorporated functionality now covered by the BaseGenerator class. May be fully merged in future versions.
+"""Defines the :class:`~hawks.dataset.Dataset` class, which handles general properties of the dataset that is being evolved (and is consistent across individuals in the population).
 """
 import warnings
 
 import numpy as np
 
 class Dataset:
+    """Class for properties about the dataset (such as the size, number of dimensions) as a whole go here.
+
+    Separation may be useful for potential future development.
+
+    Attributes:
+        num_examples (int): Total size of the dataset.
+        num_clusters (int): Number of clusters.
+        num_dims (int): Number of dimensions.
+        equal_clusters (bool): If the clusters should be equally sized.
+        min_clust_size (int): Minimum size (number of data points) a cluster should have.
+        global_rng (:py:class:`~numpy.random.mtrand.RandomState`): The global :py:class:`~numpy.random.mtrand.RandomState` instance used as a common RNG.
+    """
     # Global RandomState reference
     global_rng = None
     def __init__(self, num_examples, num_clusters, num_dims, equal_clusters, min_clust_size):

@@ -1,3 +1,5 @@
+"""Handles loading of datasets or previous runs of HAWKS (by creating a :class:`~hawks.generator.BaseGenerator` object).
+"""
 from pathlib import Path
 import warnings
 import re
@@ -7,24 +9,27 @@ import pandas as pd
 
 import hawks.generator
 
+
 def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, labels_filename=False, custom_func=None, **kwargs):
     """Function to load datasets from an external source. The path to the folder is given, and by default all .csvs are used. The labels for the data can be specified as a separate file, or final column of the data.
 
-    Any extra kwargs are passed to np.loadtxt, which loads the data in.
+    Any extra kwargs are passed to :func:`numpy.loadtxt` , which loads the data in.
 
-    Arguments:
-        folder_path {str,Path} -- Path to the folder containing the data
-
-    Keyword Arguments:
-        glob_filter {str} -- Select the files in the folder using this filter (default: {"*.csv"})
-        labels_last_column {bool} -- If the labels are in the last column or not (default: {True})
-        labels_filename {bool} -- If the labels are in a separate file (with 'labels' in the filename) (default: {False})
-        custom_func {func} -- Function for processing the data directly, useful if it's a special case. Must return filenames, datasets, and corresponding labels.
+    Args:
+        folder_path (:obj:`str`, :class:`pathlib.Path`): The path to the folder that is to be loaded from.
+        glob_filter (str, optional): Filter to select a subset of files. Defaults to "*.csv".
+        labels_last_column (bool, optional): If the labels are in the last column of the data or not. Defaults to True.
+        labels_filename (bool, optional): If the labels are in a separate file (with 'labels' in the filename). Defaults to False.
+        custom_func (:obj:`~typing.Callable`, optional): Custom function for processing the data directly. Must return filenames, datasets, and corresponding labels. Useful for special cases (which is most datasets, as formats are rarely consistent). Defaults to None.
 
     Returns:
-        filenames {list} -- A list of the filenames for each loaded file
-        datasets {list} -- A list of the loaded datsets
-        label_sets {list} -- A list of the labels
+        tuple: A 3-element tuple containing:
+
+            filenames (list): A list of the filenames for each loaded file.
+
+            datasets (list): A list of the loaded datsets.
+
+            label_sets (list): A list of the labels.
     """
     # Convert the folder_path to a Path if needed
     if isinstance(folder_path, str):
@@ -46,7 +51,7 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, lab
     files = list(folder_path.glob(glob_filter))
     # Sort them files (avoids needing leading 0s)
     # https://stackoverflow.com/a/36202926/9963224
-    files.sort(key=lambda var:[int(x) if x.isdigit() else x for x in re.findall(r'[^0-9]|[0-9]+', str(var))])
+    files.sort(key=lambda var: [int(x) if x.isdigit() else x for x in re.findall(r'[^0-9]|[0-9]+', str(var))])
     # If no files are found, raise error
     if not files:
         raise ValueError(f"{folder_path} with {glob_filter} filter had no results")
@@ -60,7 +65,7 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, lab
         label_sets = []
         # Loop through the files
         for file in files:
-            filenames.append(file.name)
+            filenames.append(file.stem)
             # If the labels are in separate files, load them
             if labels_filename:
                 if "label" in file:
@@ -78,13 +83,14 @@ def load_datasets(folder_path, glob_filter="*.csv", labels_last_column=True, lab
     return filenames, datasets, label_sets
 
 def load_folder(folder_path):
-    """Creates a generator object from a folder (previously created by the generator).
+    """Creates a :class:`~hawks.generator.BaseGenerator` object from a folder (that was previously created by the generator).
 
-    Arguments:
-        folder_path {str, Path} -- Name or path to a previously generated folder
+    Args:
+        folder_path (:obj:`str`, :class:`pathlib.Path`): The path to the folder that is to be loaded from.
+        glob_filter (str, optional): Filter to select a subset of files. Defaults to "*.csv".
 
     Returns:
-        BaseGenerator -- A generator of the subclass specified in the config
+        :class:`~hawks.generator.BaseGenerator`: A generator of the subclass specified in the config.
     """
     # If it's not a Path, make it one
     if not isinstance(folder_path, Path):
@@ -96,6 +102,8 @@ def load_folder(folder_path):
     config_path = list(folder_path.glob("*_config.json"))
     if len(config_path) > 1:
         raise ValueError("More than one config found - unsure which is the main one.")
+    elif not config_path:
+        raise ValueError("No config found - was one not saved?")
     else:
         config_path = config_path[0]
     # Create the generator object
@@ -112,12 +120,21 @@ def load_folder(folder_path):
     if len(stats_path) > 1:
         raise ValueError("More than one stats csv found, unsure which is the main one.")
     else:
-        stats_path = stats_path[0]
-    # Load the stats CSV
-    gen.stats = pd.read_csv(
-        stats_path,
-        index_col=False
-    )
+        # Try to load the stats
+        try:
+            stats_path = stats_path[0]
+            # Load the stats CSV
+            gen.stats = pd.read_csv(
+                stats_path,
+                index_col=False
+            )
+        except IndexError:
+            warnings.warn(
+                message=f"No 'hawks_stats.csv' was found",
+                category=UserWarning
+            )
+            # Set as None
+            gen.stats = None
     # Load the datasets
     dataset_paths = list(folder_path.glob("datasets/*"))
     # Check if there is actually anything to load

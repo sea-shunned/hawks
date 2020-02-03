@@ -1,5 +1,4 @@
-"""
-Defines the Cluster class, which represents a single cluster. Contains properties of the cluster (size, mean, covariance, data point values etc.). 
+"""Defines the :class:`~hawks.cluster.Cluster` class, which represents a single cluster. Contains properties of the cluster (size, mean, covariance, data point values etc.).
 
 Responsible for the methods defining the mutation of a cluster.
 """
@@ -10,18 +9,33 @@ from scipy.stats import special_ortho_group, dirichlet
 from scipy.linalg import fractional_matrix_power
 
 class Cluster:
+    """Class for properties about a single cluster. Methods for manipulating a single cluster (such as mutation), and the initialization, go here.
+    
+    Attributes:
+        id_value (:py:func:`itertools.count`): Unique ID value for each cluster .
+        global_rng (:py:class:`~numpy.random.mtrand.RandomState`): The global :py:class:`~numpy.random.mtrand.RandomState` instance used as a common RNG.
+        num_dims (int): Number of dimensions.
+        num_clusters (int): Number of clusters.
+        cluster_sizes (list): List of cluster sizes.
+        initial_mean_upper (float): Upper range to sample the means from.
+        initial_cov_upper (float): Upper range to sample the variances from.
+        size (int): The size of the cluster (number of data points).
+    """
     # Get unique id value for each cluster
     id_value = count()
     # Global RandomState reference
     global_rng = None
-    # #
-    # num_dims = None
-    # num_clusters = None
-    # cluster_sizes = None
+    # Variables from Dataset
+    num_dims = None
+    num_clusters = None
+    cluster_sizes = None
+    # The initialziation upper bounds
+    initial_mean_upper = None
+    initial_cov_upper = None
     def __init__(self, size):
         # The cluster size (num data points)
         self.size = size
-        # Mean of the cluster (Gaussian)
+        #: array: Mean of the cluster (Gaussian)
         self.mean = None
         # Covariance (diagonal matrix!)
         self.cov = None
@@ -40,7 +54,24 @@ class Cluster:
         # Setup the cluster for use
         self.initial_cluster_setup()
 
+    @classmethod
+    def setup_variables(cls, dataset_obj, ga_params):
+        """Shares variables from the :class:`~hawks.dataset.Dataset` classthat are needed here.
+        
+        Args:
+            dataset_obj (:class:`~hawks.dataset.Dataset`): Dataset instance for this run
+            ga_params (dict): GA parameters from the main config
+        """
+        # Give the Cluster class access to some important Dataset values
+        for key, val in dataset_obj.cluster_vars.items():
+            setattr(cls, key, val)
+        # Set the initialization bounds from the GA parameters
+        setattr(cls, "initial_mean_upper", ga_params["initial_mean_upper"])
+        setattr(cls, "initial_cov_upper", ga_params["initial_cov_upper"])
+
     def initial_cluster_setup(self):
+        """Sets up a :class:`~hawks.cluster.Cluster` instance
+        """
         # Set the seed for the cluster
         self.set_seed()
         # Set the random state (using the seed)
@@ -55,7 +86,7 @@ class Cluster:
         # self.sample_values()
 
     def set_seed(self):
-        """Generate a random number for the seed.
+        """Generate and set the random seed.
         """
         # This needs to use the Dataset random_state so that we ensure consistency
         self.num_seed = self.global_rng.randint(
@@ -67,21 +98,26 @@ class Cluster:
         self.clust_randstate = np.random.RandomState(self.num_seed)
     
     def gen_initial_mean(self):
-        """Generate the mean vector for the cluster. Uses the class variables taken from the relevant Dataset instance to generate the mean.
+        """Generate the initial mean vector for the :class:`~hawks.cluster.Cluster()`.
         """
         # Try to generate the mean (using a uniform distribution)
         try:
             self.mean = self.global_rng.uniform(
-                0, 1, self.num_dims)
+                0, self.initial_mean_upper, self.num_dims)
         except AttributeError as e:
-            raise Exception(f"Num_dims is not set as an attr for Cluster - this should have come from Dataset") from e
+            raise Exception(f"num_dims is not set as an attr for Cluster - this should have come from Dataset") from e
 
     def gen_initial_cov(self, method="eigen"):
+        """Generates the initial (axis-aligned) covariance matrix.
+        
+        Args:
+            method (str, optional): Method to generate the covariance. Defaults to "eigen".
+        """
         # Generate initial covariance matrix
         if method == "eigen":
             self.cov = np.diag(
                 self.global_rng.uniform(
-                    0, (1/2), self.num_dims
+                    0, self.initial_cov_upper, self.num_dims
                 )
             )
 
@@ -89,7 +125,7 @@ class Cluster:
         # Generate a random rotation matrix
         return special_ortho_group.rvs(
             dim=self.num_dims, random_state=self.global_rng)
-    
+
     def _gen_scaling(self):
         """Generates a matrix to scale the covariance of a cluster. Ensures that the resulting determinant is unchanged.
         """
@@ -100,17 +136,19 @@ class Cluster:
     def rotate_cov(self):
         # Rotate the covariance matrix
         return self.rotation.dot(self.cov).dot(self.rotation.T)
-    
+
     def _scale_cov(self, S):
         # Scale the covariance matrix by the scaling matrix
         return np.diag(self.cov.dot(S))
-    
+
     @staticmethod
     def _reduce_rotation(R, power):
         # Reduce the rotation by a fractional power to reduce perturbation
         return fractional_matrix_power(R, power)
 
     def sample_values(self):
+        """Samples values from the defined distribution (Gaussian with the instance's ``mean``, ``cov``, and ``size`` attributes)
+        """
         # Reinitialise RandomState to sample consistent points
         self.set_state()
         # Obtain the current (rotated) covariance
@@ -122,7 +160,19 @@ class Cluster:
             size=self.size,
             check_valid='ignore') # ignores check for PSD
 
-    def mutate_mean_random(self, scale, dims="each"):
+    def mutate_mean_random(self, scale, dims, **kwargs):
+        """Random mutation operator for the mean
+
+        Args:
+            scale (float): Width of the Gaussian sampled from to shift the mean
+            dims (str): Option to test each dimension seperately for mutation, or mutate in all simultaneously
+
+        Raises:
+            ValueError: If a valid option is not supplied for ``dims``
+
+        Returns:
+            list: Returns the new mean vector
+        """
         if dims == "each":
             # Probability test each dimension to mutate the mean
             return [
@@ -138,11 +188,15 @@ class Cluster:
             raise ValueError(f"{dims} is not a recognised option")
 
     def mutate_cov_haar(self, power):
+        """Mutation operator for the covariance (Haar operator)
+        
+        Args:
+            power (float): The power to reduce (when <1) the rotation matrix to avoid too large a change in the covariance. Behaviour when >1 is undocumented, and probably bad.
+        """
         # Generate the scaling matirx
         S = self._gen_scaling()
-        #print("cov before scaling", self.cov)
+        # Scale the covariance
         self.cov = self._scale_cov(S)
-        #print("cov after scaling", self.cov, "\n")
         # Generate a new rotation matrix
         R_new = self._gen_rotation()
         # Reduce this rotation matrix (so it's more of a perturbation)
