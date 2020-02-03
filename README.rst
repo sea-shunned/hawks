@@ -59,8 +59,52 @@ default values. Further examples can be found `here <https://hawks.readthedocs.i
 
 .. Need to turn the bit below into an example file and then just include that
 
-.. literalinclude:: docs/examples/simple_example.py
-    :language: python
+.. code-block:: python
+
+    """Single, simple HAWKS run, with KMeans applied to the best dataset
+    """
+    import numpy as np
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import adjusted_rand_score
+    import hawks
+
+    # Set the magic seed number
+    SEED_NUM = 42
+    # Set the seed number in the config
+    config = {
+        "hawks": {
+            "folder_name": "simple_example",
+            "seed_num": SEED_NUM
+        },
+        "dataset": {
+            "num_clusters": 5
+        },
+        "objectives": {
+            "silhouette": {
+                "target": 0.9
+            }
+        }
+    }
+    # Any missing parameters will take from hawks/defaults.json
+    generator = hawks.create_generator(config)
+    # Run the generator
+    generator.run()
+    # Let's plot the best individual found
+    generator.plot_best_indivs(show=True)
+    # Get the best dataset found and it's labels
+    datasets, label_sets = generator.get_best_dataset()
+    # Stored as a list for multiple runs
+    data, labels = datasets[0], label_sets[0]
+    # Run KMeans on the data
+    km = KMeans(
+        n_clusters=len(np.unique(labels)), random_state=SEED_NUM
+    ).fit(data)
+    # Plot the output of KMeans
+    hawks.plotting.scatter_prediction(data, km.labels_)
+    # Get the Adjusted Rand Index for KMeans on the data
+    ari = adjusted_rand_score(labels, km.labels_)
+    print(f"ARI: {ari}")
+
 
 .. example-marker-end
 
@@ -68,7 +112,7 @@ default values. Further examples can be found `here <https://hawks.readthedocs.i
 Documentation
 -------------
 
-For further information about how to use HAWKS, including examples, please see the `documentation <https://hawks.readthedocs.io/>`_.
+For further information about how to use HAWKS, including examples, please see the `documentation <https://hawks.readthedocs.io/>`__.
 
 
 Issues
@@ -78,7 +122,7 @@ As this work is still in development, plain sailing is not guaranteed.
 If you encounter an issue, first ensure that ``hawks`` is running as
 intended by navigating to the tests directory, and running
 ``python tests.py``. If any test fails, please add details of this
-alongside your original problem to an issue on the `GitHub repo <https://github.com/sea-shunned/hawks>`_.
+alongside your original problem to an issue on the `GitHub repo <https://github.com/sea-shunned/hawks>`__.
 
 
 Contributing
@@ -86,8 +130,8 @@ Contributing
 
 .. contributing-marker-start
 
-At present, this is primarily academic work, so future developments will be released here after they have been published. If you have any suggestions or simple feature requests for HAWKS as a tool to use, please raise that on the `GitHub repo <https://github.com/sea-shunned/hawks/issues>`_.
+At present, this is primarily academic work, so future developments will be released here after they have been published. If you have any suggestions or simple feature requests for HAWKS as a tool to use, please raise that on the `GitHub repo <https://github.com/sea-shunned/hawks/issues>`__.
 
-I have various directions for HAWKS at present, and can only work on a subset of them, and so involvement with more people would be great. If you would like to extend this work or collaborate, please `contact me <https://sea-shunned.github.io/>`_.
+I have various directions for HAWKS at present, and can only work on a subset of them, and so involvement with more people would be great. If you would like to extend this work or collaborate, please `contact me <https://sea-shunned.github.io/>`__.
 
 .. contributing-marker-end
