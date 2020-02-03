@@ -127,15 +127,15 @@ def analyse_datasets(generator=None, datasets=None, label_sets=None, cluster_sub
         generator (:class:`~hawks.generator.BaseGenerator`, optional): HAWKS generator instance (that contains datasets). Defaults to None.
         datasets (list, optional): A list of the datasets to be examined. Defaults to None.
         label_sets (list, optional): A list of labels that match the list of datasets. Defaults to None.
-        cluster_subset (list, optional): A list of clustering algorithms to use. Defaults to None, where all default clustering algorithms (specified in `:func:~hawks.analysis.define_cluster_algs`) are used.
-        feature_subset (list, optional): A list of problem features to use. Defaults to None, where all problem features (specified in `:mod:~hawks.problem_features`) are used.
+        cluster_subset (list, optional): A list of clustering algorithms to use. Defaults to None, where all default clustering algorithms (specified in :func:`~hawks.analysis.define_cluster_algs`) are used.
+        feature_subset (list, optional): A list of problem features to use. Defaults to None, where all problem features (specified in :mod:`~hawks.problem_features`) are used.
         seed (int, optional): Random seed number. Defaults to None, where it is randomly selected.
         source (str, optional): Name of the set of datasets. Useful for organizing/analyzing/plotting results. Defaults to "HAWKS".
         prev_df (:py:class:`~pandas.DataFrame`, optional): Pass in a previous DataFrame, with which the results are added to. Defaults to None, creating a blank DataFrame.
         clustering (bool, optional): Whether to run clustering algorithms on the datasets or not. Defaults to True.
         feature_space (bool, optional): Whether to run the problem features on the datasets or not. Defaults to True.
         save (bool, optional): Whether to save the results or not. Defaults to True.
-        save_folder ([type], optional): Where to save the results. Defaults to None, where the location of the :class:`~hawks.generator.BaseGenerator` is used. If no :class:`~hawks.generator.BaseGenerator` instance was given, create a folder in the working directory. 
+        save_folder (str, :class:`pathlib.Path`, optional): Where to save the results. Defaults to None, where the location of the :class:`~hawks.generator.BaseGenerator` is used. If no :class:`~hawks.generator.BaseGenerator` instance was given, create a folder in the working directory. 
         filename (str, optional): Name of the CSV file to be saved. Defaults to "dataset_analysis".
 
     Returns:
@@ -238,7 +238,7 @@ def run_clustering(datasets, label_sets, config_nums, alg_dict, df, source):
         datasets (list, optional): A list of the datasets to be examined. Defaults to None.
         label_sets (list, optional): A list of labels that match the list of datasets. Defaults to None.
         config_nums (list): A list of the config numbers (only relevant for HAWKS, not external datasets). Allows linking of datasets to parameter configuration.
-        alg_dict (dict): Dictionary of the clustering algorithms. Defined in `:func:~hawks.analysis.define_cluster_algs`.
+        alg_dict (dict): Dictionary of the clustering algorithms. Defined in :func:`~hawks.analysis.define_cluster_algs`.
         df (:py:class:`~pandas.DataFrame`): DataFrame to add the results to.
         source (str): Name of the set of datasets.
     
