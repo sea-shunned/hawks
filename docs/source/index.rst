@@ -16,6 +16,11 @@ Welcome to HAWKS's documentation!
     contributing
     testing
 
+.. image:: images/hawks_animation.gif
+   :alt: Example gif of HAWKS
+   :scale: 65 %
+   :align: center
+
 .. include:: ../../README.rst
   :start-after: summary-marker-1-start
   :end-before: summary-marker-1-end

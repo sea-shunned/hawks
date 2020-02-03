@@ -1,12 +1,12 @@
 HAWKS Data Generator
 ====================
 
-.. summary-marker-1-start
-
 .. image:: docs/source/images/hawks_animation.gif
    :alt: Example gif of HAWKS
    :scale: 65 %
    :align: center
+
+.. summary-marker-1-start
 
 HAWKS is a tool for generating controllably difficult synthetic data,
 used primarily for clustering.
