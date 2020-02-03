@@ -59,13 +59,10 @@ default values. Further examples can be found `here <https://hawks.readthedocs.i
 
 .. Need to turn the bit below into an example file and then just include that
 
-.. literalinclude:: examples/simple_example.py
+.. literalinclude:: docs/examples/simple_example.py
     :language: python
 
 .. example-marker-end
-
-.. 
-
 
 
 Documentation
