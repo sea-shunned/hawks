@@ -11,8 +11,11 @@ if __name__ == '__main__':
         license='MIT License',
         description='A package for generating synthetic clusters, with parameters to customize different aspects of the complexity of the cluster structure',
         long_description=open('README.rst').read(),
-        long_description_content_type='text/markdown',
+        long_description_content_type='text/x-rst',
         include_package_data=True,
+        project_urls={
+            "Documentation": "https://hawks.readthedocs.io/"
+        },
         python_requires='>=3.6',
         install_requires=[
             "deap == 1.2.2",
