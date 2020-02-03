@@ -48,6 +48,7 @@ exclude_patterns = []
 # Remove the "View page source" link
 html_show_sourcelink = False
 
+master_doc = "index"
 
 # -- Options for HTML output -------------------------------------------------
 
