@@ -3,7 +3,7 @@ HAWKS Data Generator
 
 .. summary-marker-1-start
 
-.. image:: images/hawks_animation.gif
+.. image:: docs/source/images/hawks_animation.gif
    :alt: Example gif of HAWKS
    :scale: 65 %
    :align: center
