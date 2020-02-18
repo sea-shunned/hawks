@@ -19,6 +19,19 @@ This `repo <https://github.com/sea-shunned/hawks>`_ is associated with the follo
 
 1. `Shand, C. <http://sea-shunned.github.io/>`_, `Allmendinger, R. <https://personalpages.manchester.ac.uk/staff/Richard.Allmendinger/>`_, `Handl, J. <https://personalpages.manchester.ac.uk/staff/Julia.Handl/>`_, `Webb, A. <http://www.awebb.info/>`_, & Keane, J. (2019, July). Evolving controllably difficult datasets for clustering. In Proceedings of the Genetic and Evolutionary Computation Conference (pp. 463-471). https://doi.org/10.1145/3321707.3321761 **(Nominated for best paper on the evolutionary machine learning track at GECCO'19)**
 
+Related BibTeX info:
+
+.. code-block:: bibtex
+
+    @inproceedings{shand2019evolving,
+        title={Evolving controllably difficult datasets for clustering},
+        author={Shand, Cameron and Allmendinger, Richard and Handl, Julia and Webb, Andrew and Keane, John},
+        booktitle={Proceedings of the Genetic and Evolutionary Computation Conference},
+        pages={463--471},
+        year={2019},
+        url={https://doi.org/10.1145/3321707.3321761}
+    }
+
 The academic/technical details can be found there. What follows here is
 a practical guide to using HAWKS to generate synthetic data.
 
