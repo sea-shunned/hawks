@@ -1,12 +1,12 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 if __name__ == '__main__':
     setup(
         name='hawks',
         version='0.2.0',
         author='Cameron Shand',
-        author_email='cameron.shand@manchester.ac.uk',
-        packages=['hawks'],
+        author_email='c.shand@ucl.ac.uk',
+        packages=find_packages(),
         url='https://github.com/sea-shunned/hawks',
         license='MIT License',
         description='A package for generating synthetic clusters, with parameters to customize different aspects of the complexity of the cluster structure',
@@ -18,7 +18,7 @@ if __name__ == '__main__':
         },
         python_requires='>=3.6',
         install_requires=[
-            "deap == 1.2.2",
+            "deap >= 1.2.2",
             "matplotlib >= 3.0",
             "numpy >= 1.15",
             "orange3 >= 3.23",

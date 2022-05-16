@@ -496,28 +496,27 @@ class ObjectiveTests(unittest.TestCase):
             self.indiv.all_values,
             self.indiv.labels,
             metric="sqeuclidean"), self.indiv.silhouette)
-        
+
         self.assertTrue(close_to_sk)
 
     def test_silhouette_changed_indiv(self):
         hawks.objectives.Silhouette.eval_objective(self.indiv)
         for cluster in self.indiv:
             cluster.changed = False
-        
+
         self.indiv[0].gen_initial_mean()
         self.indiv[0].changed = True
         aux = self.indiv.silhouette
-        
+
         self.indiv.resample_values()
         hawks.objectives.Silhouette.eval_objective(self.indiv)
-        
-        self.assertNotAlmostEqual(aux, self.indiv.silhouette)
 
+        self.assertNotAlmostEqual(aux, self.indiv.silhouette)
         close_to_sk = np.isclose(silhouette_score(
             self.indiv.all_values,
             self.indiv.labels,
             metric="sqeuclidean"), self.indiv.silhouette)
-        
+        # print(silhouette_score(self.indiv.all_values,self.indiv.labels,metric="sqeuclidean"), self.indiv.silhouette)
         self.assertTrue(close_to_sk)
     
     def test_silhouette_singleton_cluster(self):

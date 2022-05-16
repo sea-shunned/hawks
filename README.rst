@@ -13,11 +13,12 @@ used primarily for clustering.
 
 .. summary-marker-1-end
 
-This `repo <https://github.com/sea-shunned/hawks>`_ is associated with the following paper:
+This `repo <https://github.com/sea-shunned/hawks>`_ is associated with the following papers:
 
 .. paper-marker-1-start
 
 1. `Shand, C. <http://sea-shunned.github.io/>`_, `Allmendinger, R. <https://personalpages.manchester.ac.uk/staff/Richard.Allmendinger/>`_, `Handl, J. <https://personalpages.manchester.ac.uk/staff/Julia.Handl/>`_, `Webb, A. <http://www.awebb.info/>`_, & Keane, J. (2019, July). Evolving controllably difficult datasets for clustering. In Proceedings of the Genetic and Evolutionary Computation Conference (pp. 463-471). https://doi.org/10.1145/3321707.3321761 **(Nominated for best paper on the evolutionary machine learning track at GECCO'19)**
+2. `Shand, C. <http://sea-shunned.github.io/>`_, `Allmendinger, R. <https://personalpages.manchester.ac.uk/staff/Richard.Allmendinger/>`_, `Handl, J. <https://personalpages.manchester.ac.uk/staff/Julia.Handl/>`_, `Webb, A. <http://www.awebb.info/>`_, & Keane, J. (2021, Dec.). HAWKS: Evolving Challenging Benchmark Sets for Cluster Analysis. Published in **IEEE Transactions on Evolutionary Computation**. https://doi.org/10.1109/TEVC.2021.3137369
 
 Related BibTeX info:
 
@@ -30,6 +31,15 @@ Related BibTeX info:
         pages={463--471},
         year={2019},
         url={https://doi.org/10.1145/3321707.3321761}
+    }
+    @article{shand2021hawks,
+    author={Shand, Cameron and Allmendinger, Richard and Handl, Julia and Webb, Andrew and Keane, John},
+    journal={IEEE Transactions on Evolutionary Computation},
+    title={HAWKS: Evolving Challenging Benchmark Sets for Cluster Analysis},   year={2021},
+    volume={},
+    number={},
+    pages={1-1},
+    doi={10.1109/TEVC.2021.3137369}
     }
 
 The academic/technical details can be found there. What follows here is
